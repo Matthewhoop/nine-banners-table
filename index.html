@@ -20,7 +20,7 @@
       <div class="join-card">
         <p class="eyebrow">Pellane · three days · a river truce</p>
         <h1>The Accord of<br>Nine Banners</h1>
-        <p class="join-lede">A table the whole group opens on their phones. You are envoy Sera Vell’s blades. Keep her alive. Keep her seal off other people’s wax. Smile through three days of toasts.</p>
+        <p class="join-lede">A shared story companion the whole table opens on their phones while you play together. You are envoy Sera Vell’s blades. Keep her alive. Keep her seal off other people’s wax. Smile through three days of toasts.</p>
         <div class="join-actions">
           <button type="button" class="btn brass" id="btn-open-dm">Open as DM</button>
           <button type="button" class="btn ink" id="btn-show-player">Join as player</button>
@@ -56,24 +56,19 @@
       </header>
 
       <div id="panel-stage" class="panel">
-        <div class="stage-frame">
-          <div class="stage-wrap" id="stage-wrap">
-            <canvas id="stage" width="240" height="160" aria-label="Pellane stage"></canvas>
-            <div class="stage-caption">
-              <p class="cap-loc" id="cap-loc">The Low Quay</p>
+        <div class="story-page" id="story-page">
+          <div class="story-art" id="story-art">
+            <canvas id="stage" width="240" height="160" aria-label="Illustrated scene"></canvas>
+            <div class="cast-strip" id="cast-strip" role="list" aria-label="Who is present"></div>
+          </div>
+          <button type="button" class="story-caption" id="story-caption" aria-live="polite">
+            <canvas id="cap-bust" width="56" height="56" aria-hidden="true"></canvas>
+            <div class="cap-body">
+              <p class="cap-kicker"><span class="cap-speaker hidden" id="cap-speaker"></span><span class="cap-loc" id="cap-loc">The Low Quay</span></p>
               <p class="cap-nar" id="cap-nar"></p>
+              <p class="cap-hint hidden" id="cap-hint">tap to continue</p>
             </div>
-            <div class="present-row" id="present-row"></div>
-          </div>
-        </div>
-
-        <div id="dialogue" class="dialogue hidden" role="dialog" aria-live="polite">
-          <canvas id="bust" width="48" height="48" aria-hidden="true"></canvas>
-          <div class="dlg-body">
-            <p class="dlg-name" id="dlg-name"></p>
-            <p class="dlg-text" id="dlg-text"></p>
-            <p class="dlg-hint">tap to continue</p>
-          </div>
+          </button>
         </div>
 
         <div id="faceoff-ui" class="faceoff-ui hidden">
@@ -93,19 +88,6 @@
             <button type="button" data-cmd="look">Look</button>
             <button type="button" data-cmd="act">Act</button>
             <button type="button" data-cmd="leave">Leave</button>
-          </div>
-        </div>
-
-        <div id="hud-overworld" class="hud">
-          <div class="dpad" id="dpad">
-            <button type="button" data-dir="up" aria-label="Up">▲</button>
-            <button type="button" data-dir="left" aria-label="Left">◀</button>
-            <button type="button" data-dir="right" aria-label="Right">▶</button>
-            <button type="button" data-dir="down" aria-label="Down">▼</button>
-          </div>
-          <div class="abtn-col">
-            <button type="button" class="abtn" id="btn-talk">Talk</button>
-            <button type="button" class="abtn dim" id="btn-look-ow">Look</button>
           </div>
         </div>
 

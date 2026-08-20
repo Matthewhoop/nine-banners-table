@@ -1,6 +1,6 @@
 # The Accord of Nine Banners — Table
 
-A mobile-first D&D table the whole group opens on their phones. Pixel overworld, talk boxes, face-off beats, party tracker, and a level-up coach.
+A mobile-first D&D **story companion** the whole group opens on their phones while they play together at a real table. Illustrated scenes, a shared caption, party tracker, and a level-up coach. Not a video game you walk around on the phone.
 
 Static HTML/CSS/JS. No build step. No accounts.
 
@@ -30,8 +30,8 @@ State lives in `localStorage` under `nb-table-state`. Same-browser tabs sync wit
 
 ## What you get
 
-- **Stage** — walk a 16-bit-ish Pellane room (D-pad or arrows). Talk / Look. NPCs stand in the room. Dialogue typewriter + portrait.
-- **Face-off** (DM) — confrontation / toast / chase / latch / steel. Commands: Speak · Look · Act (or Fight) · Leave.
+- **Stage** — a living storybook page. Full-bleed pixel scene art, a cast strip of who is present, and a caption for the current beat (typewriter; tap to continue). Tap a portrait to hear that person. Nobody steers an avatar.
+- **Face-off** (DM) — a tense beat the table looks at together: two figures, bars, Speak · Look · Act (or Fight) · Leave. Start or end from the DM tools.
 - **Party** — HP thumbs, AC, skills, conditions. Coach lists what that class+level should have claimed (2014 PHB): HP, proficiency, subclass timing, ASI/feat, Extra Attack, slot jumps.
 - **People** — player-safe dossiers. No campaign twists.
 - **Dice** — d4–d20, last roll on the table.
@@ -40,7 +40,7 @@ State lives in `localStorage` under `nb-table-state`. Same-browser tabs sync wit
 
 | File | Use |
 |---|---|
-| `art/inn.png` | Low Quay inn overworld |
+| `art/inn.png` | Low Quay inn |
 | `art/quay.png` | Pellane quay / procession / streets |
 | `art/hall.png` | Granary-hall petitions |
 | `art/faceoff.png` | Face-off / banquet atmosphere |
@@ -55,6 +55,5 @@ Generate these if you want unique rooms and the rest of the cast:
 - `art/procession.png`
 - `art/pellane.png`
 - Cast frames for Ise Calren, Brann Orswick, Tolla, Speaker Kell, Ysolde Thane, Corin Ivola, Pava Rell, Durne, Lir, Mara Quell
-- Walk-cycle frames (idle standing is bobbed for now)
 
 JPG aliases (`quay.jpg`, `inn.jpg`, …) are not required; the app loads the PNGs above.
