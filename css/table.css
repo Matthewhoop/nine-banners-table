@@ -157,6 +157,7 @@ textarea { min-height: 88px; resize: vertical; }
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .story-art {
   position: relative;
@@ -291,6 +292,7 @@ textarea { min-height: 88px; resize: vertical; }
 
 .story-page.faceoff .cast-strip { display: none; }
 .story-page.faceoff .story-art { min-height: 150px; }
+.story-page.faceoff .decision-card { display: none !important; }
 
 .faceoff-ui {
   flex: 0 0 auto;
@@ -316,8 +318,131 @@ textarea { min-height: 88px; resize: vertical; }
 }
 .fo-cmds button:active { background: #3a2c1c; }
 
-.dm-tools { display: flex; gap: 8px; padding: 8px 10px; background: #100c08; }
-.dm-tools .btn { flex: 1; }
+.dm-tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 10px; background: #100c08; }
+.dm-tools .btn { flex: 1 1 30%; min-width: 104px; }
+
+/* —— Decisions (D&D input under the caption) —— */
+.story-page.has-decision .story-art { min-height: 96px; }
+.story-page.has-decision .story-caption { min-height: 88px; padding-bottom: 10px; }
+.story-page.has-decision .cap-nar { min-height: 1.4em; }
+.decision-card {
+  flex: 0 0 auto;
+  max-height: 44dvh;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background: linear-gradient(180deg, #1a1410, #120e0a);
+  border-top: 1px solid var(--line);
+  padding: 12px 12px 12px;
+}
+.dec-head {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 0 0 10px;
+}
+.dec-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--brass);
+  background: #241c14;
+  white-space: nowrap;
+}
+.dec-badge.solo { border-color: var(--ember); color: #e8b090; background: #2a1810; }
+.dec-badge.group { border-color: var(--teal-bright); color: #b8d8d0; background: #14241e; }
+.dec-prompt {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.35;
+  color: var(--cream);
+}
+.dec-status {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--paper);
+}
+.dec-choices, .dec-reacts { display: grid; gap: 8px; margin: 0 0 10px; }
+.dec-choices button, .dec-reacts button {
+  min-height: 48px;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #241c14;
+  color: var(--cream);
+  font-weight: 650;
+}
+.dec-choices button.on, .dec-reacts button.on {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 1px var(--brass-dim);
+  background: #3a2c1c;
+}
+.dec-choices button:active, .dec-reacts button:active { background: #3a2c1c; }
+.dec-field { display: grid; gap: 6px; margin: 0 0 10px; }
+.dec-field label, .dec-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper);
+}
+.dec-field textarea {
+  min-height: 72px;
+  border-radius: 12px;
+}
+.dec-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.dec-actions .btn { flex: 1 1 120px; }
+.dec-tally {
+  margin: 8px 0 10px;
+  padding: 10px 10px 6px;
+  background: #0e0c09;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.dec-tally h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brass);
+  font-weight: 650;
+}
+.dec-counts { margin: 0 0 8px; font-size: 13px; color: var(--paper); }
+.dec-row {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(201, 161, 91, 0.12);
+}
+.dec-row:first-of-type { border-top: 0; }
+.dec-who { font-weight: 650; color: var(--cream); font-size: 14px; }
+.dec-said { font-size: 13px; color: var(--mist); font-family: var(--font); }
+.dec-pick {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.dec-pick select { min-height: 48px; }
+.check-row {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px;
+  font-size: 14px;
+  color: var(--paper);
+}
+.check-row input { width: auto; min-height: 0; }
+.kind-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.kind-toggle button {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #241c14;
+  color: var(--cream);
+  font-weight: 650;
+}
+.kind-toggle button.on { border-color: var(--brass); background: #3a2c1c; color: var(--brass); }
 
 .dock {
   flex: 0 0 var(--dock-h);
