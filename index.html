@@ -51,6 +51,7 @@
           </div>
         </div>
         <div class="topbar-right">
+          <button type="button" class="chip" id="btn-feedback">Feedback</button>
           <button type="button" class="chip" id="btn-role" title="Switch role">Role</button>
         </div>
       </header>
@@ -131,12 +132,32 @@
     <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-card" id="modal-card"></div>
     </div>
+
+    <div id="feedback-sheet" class="modal fb-modal hidden" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+      <form class="modal-card fb-card" id="fb-form" autocomplete="off">
+        <h3 id="fb-title">Feedback</h3>
+        <p class="sheet-lede">A note for the table, not the story.</p>
+        <label class="fb-label">What’s off or missing?
+          <textarea id="fb-note" name="note" maxlength="800" rows="4" placeholder="A tap that missed, a line that didn’t land, something you needed…"></textarea>
+        </label>
+        <label class="fb-label">Your name
+          <input id="fb-name" name="name" type="text" maxlength="24" placeholder="Name at the table" autocapitalize="words">
+        </label>
+        <div class="modal-actions">
+          <button type="submit" class="btn brass fb-send" id="fb-send">Send</button>
+          <button type="button" class="btn ink" id="fb-back">Back</button>
+        </div>
+      </form>
+      <p id="fb-thanks" class="fb-thanks hidden" role="status">Got it. Thanks.</p>
+    </div>
+    <div id="fb-toast" class="fb-toast hidden" role="status">Got it. Thanks.</div>
   </div>
 
   <script src="js/data.js"></script>
   <script src="js/coach.js"></script>
   <script src="js/pix.js"></script>
   <script src="js/state.js"></script>
+  <script src="js/feedback.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -25,6 +25,7 @@ Hosting (a public URL the whole table shares) comes next.
 - Table code: `9B-PELLANE`.
 - Role chip toggles DM ↔ player (PIN required to become DM).
 - Query params: `?dm=1`, `?name=Kade`.
+- Playtest **Feedback** chip (table topbar) posts notes to ntfy while you play; hide it later with `window.NB_FEEDBACK.open = false` in `js/feedback.js`.
 
 State lives in `localStorage` under `nb-table-state` (including the open decision and who submitted). Same-browser tabs sync with `BroadcastChannel`. Different phones do not share state until this is hosted with a real sync later.
 
