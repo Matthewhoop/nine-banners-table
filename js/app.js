@@ -75,6 +75,49 @@
   function decisionOpen() {
     return !!(S.decision && S.decision.status === "open") && !isFaceoff();
   }
+  function markJoined() {
+    if (isDM()) return;
+    var key = myKey();
+    if (!key || key === "guest") return;
+    S.joined = S.joined || [];
+    var exists = S.joined.some(function (j) {
+      var k = typeof j === "string" ? j : (j.key || "");
+      return String(k).toLowerCase() === key;
+    });
+    if (!exists) S.joined.push({ key: key, name: displayName(), at: Date.now() });
+  }
+  function joinedVoterKeys() {
+    var keys = {};
+    (S.joined || []).forEach(function (j) {
+      var k = (typeof j === "string" ? j : (j.key || j.name || "")).trim().toLowerCase();
+      if (k && k !== "dm" && k !== "guest") keys[k] = true;
+    });
+    return keys;
+  }
+  function expectedGroupVoters() {
+    var party = S.party || [];
+    if (party.length <= 1) return 1;
+    var joinedKeys = joinedVoterKeys();
+    var n = 0;
+    party.forEach(function (p) {
+      var nk = String(p.name || "").trim().toLowerCase();
+      if (nk && joinedKeys[nk]) n += 1;
+    });
+    return n <= 1 ? 1 : n;
+  }
+  function groupVoteCount(d) {
+    return submissionList(d).filter(function (s) {
+      return s && ((s.choice && String(s.choice).trim()) || (s.text && String(s.text).trim()));
+    }).length;
+  }
+  function shouldAutoResolve() {
+    var d = S.decision;
+    if (!d || d.status !== "open" || isFaceoff()) return false;
+    if (d.kind === "solo") return actorSubmitted();
+    var votes = groupVoteCount(d);
+    if (votes <= 0) return false;
+    return votes >= expectedGroupVoters();
+  }
   function makeLiveDecision(spec, called) {
     spec = spec || {};
     var kind = spec.kind === "solo" ? "solo" : "group";
@@ -100,17 +143,21 @@
   function authoredLines(sc) {
     return sceneBeats(sc || scene());
   }
-  function isSceneNarrationBeat() {
-    if (!S.beat || S.beat.speakerId) return false;
+  function currentAuthoredIndex() {
+    if (!S.beat || S.beat.speakerId) return -1;
     var authored = authoredLines();
-    var lines = S.beat.lines || [];
-    return authored.every(function (ln, i) { return lines[i] === ln; });
+    var line = (S.beat.lines || [])[S.beat.index | 0];
+    if (!line) return -1;
+    return authored.indexOf(line);
+  }
+  function isSceneNarrationBeat() {
+    return currentAuthoredIndex() >= 0;
   }
   function sceneDecisionForBeat() {
     var sc = scene();
     var decs = (sc && sc.decisions) || [];
     if (!decs.length || !isSceneNarrationBeat()) return null;
-    var idx = (S.beat && S.beat.index) | 0;
+    var idx = currentAuthoredIndex();
     var last = authoredLines(sc).length - 1;
     for (var i = 0; i < decs.length; i++) {
       var at = decs[i].afterBeat != null ? decs[i].afterBeat : last;
@@ -182,6 +229,10 @@
       at: Date.now()
     };
     persist();
+    if (shouldAutoResolve()) {
+      resolveDecision(false);
+      return;
+    }
     renderDecision();
   }
   function decisionSummary(d) {
@@ -222,7 +273,7 @@
     if (!decisionOpen()) return false;
     if (isDM()) return true;
     if (S.decision.kind === "solo") return actorSubmitted();
-    return submissionList().length > 0;
+    return groupVoteCount() > 0;
   }
   function resolveDecision(skipped) {
     var d = S.decision;
@@ -233,20 +284,21 @@
     S.decision = null;
     if (summary) S.lastAction = summary;
     ensureBeat();
-    var last = (S.beat.lines || []).length - 1;
+    var lines = (S.beat.lines || []).slice();
     var idx = S.beat.index | 0;
-    if (idx < last) {
+    if (summary) {
+      var nextLine = lines[idx + 1];
+      if (lines[idx] !== summary && nextLine !== summary) {
+        lines = lines.slice(0, idx + 1).concat([summary], lines.slice(idx + 1));
+      }
+      S.beat.lines = lines;
+      S.beat.index = (lines[idx] === summary) ? idx : idx + 1;
+    } else if (idx < lines.length - 1) {
       S.beat.index = idx + 1;
-      lastBeatSig = beatSig();
-      localShown = reduceMotion ? 9999 : 0;
-      typeAcc = 0;
-    } else if (summary) {
-      S.beat.lines = (S.beat.lines || []).concat([summary]);
-      S.beat.index = S.beat.lines.length - 1;
-      lastBeatSig = beatSig();
-      localShown = reduceMotion ? 9999 : 0;
-      typeAcc = 0;
     }
+    lastBeatSig = beatSig();
+    localShown = reduceMotion ? 9999 : 0;
+    typeAcc = 0;
     persist();
     renderChrome();
   }
@@ -343,7 +395,7 @@
       selStart = $("dec-text").selectionStart;
       selEnd = $("dec-text").selectionEnd;
     }
-    var html = "";
+    var html = "<div class='dec-body'>";
     var badge = d.kind === "solo" ? "One blade" : "The table";
     html += "<div class='dec-head'><span class='dec-badge " + d.kind + "'>" + badge + "</span>";
     html += "<p class='dec-prompt'>" + escapeHtml(d.prompt) + "</p></div>";
@@ -407,14 +459,16 @@
     }
 
     html += tallyHtml(d);
+    if (d.kind === "solo" && hasActor && !actorSubmitted() && !isDM()) {
+      html += "<p class='dec-status'>Waiting on " + escapeHtml(d.actorName) + ".</p>";
+    }
+    html += "</div>";
 
     if (isDM() || canPlayerContinue()) {
-      html += "<div class='dec-actions'>";
+      html += "<div class='dec-advance'><div class='dec-actions'>";
       html += "<button type='button' class='btn brass' id='dec-continue'>Continue</button>";
       if (isDM()) html += "<button type='button' class='btn slim' id='dec-skip'>Skip</button>";
-      html += "</div>";
-    } else if (d.kind === "solo" && hasActor && !actorSubmitted()) {
-      html += "<p class='dec-status'>Waiting on " + escapeHtml(d.actorName) + ".</p>";
+      html += "</div></div>";
     }
 
     el.innerHTML = html;
@@ -451,14 +505,14 @@
     NB.saveSession(sess);
     if (S.party.length === 0 && sess.role === "player") {
       S.party.push(NB.newPc(sess.name, NB.PC_COLORS[0]));
-      persist();
     } else if (sess.role === "player" && sess.name) {
       var exists = S.party.some(function (p) { return p.name.toLowerCase() === sess.name.toLowerCase(); });
       if (!exists) {
         S.party.push(NB.newPc(sess.name, NB.PC_COLORS[S.party.length % NB.PC_COLORS.length]));
-        persist();
       }
     }
+    markJoined();
+    persist();
     if (S.stageMode === "overworld") S.stageMode = "story";
     ensureBeat();
     lastBeatSig = beatSig();
@@ -502,6 +556,10 @@
     $("cast-strip").classList.toggle("hidden", isFaceoff());
     $("btn-faceoff").textContent = isFaceoff() ? "End face-off" : "Face-off";
     syncSceneDecision();
+    if (shouldAutoResolve()) {
+      resolveDecision(false);
+      return;
+    }
     renderCast();
     renderCaption();
     renderDecision();
@@ -603,7 +661,7 @@
     var more = localShown < full.length || (S.beat.index | 0) < (S.beat.lines.length - 1);
     if (decisionOpen() && localShown >= full.length) {
       $("cap-hint").classList.remove("hidden");
-      $("cap-hint").textContent = "a decision waits";
+      $("cap-hint").textContent = canPlayerContinue() ? "tap to continue" : "a decision waits";
     } else {
       $("cap-hint").classList.toggle("hidden", !more);
       $("cap-hint").textContent = localShown < full.length ? "tap to finish" : "tap to continue";
@@ -627,7 +685,10 @@
       renderCaption();
       return;
     }
-    if (decisionOpen()) return;
+    if (decisionOpen()) {
+      if (canPlayerContinue()) resolveDecision(false);
+      return;
+    }
     if ((S.beat.index | 0) < S.beat.lines.length - 1) {
       S.beat.index = (S.beat.index | 0) + 1;
       lastBeatSig = beatSig();
@@ -889,7 +950,7 @@
         if (hint) {
           if (decisionOpen() && localShown >= full.length) {
             hint.classList.remove("hidden");
-            hint.textContent = "a decision waits";
+            hint.textContent = canPlayerContinue() ? "tap to continue" : "a decision waits";
           } else {
             hint.classList.toggle("hidden", !more);
             hint.textContent = localShown < full.length ? "tap to finish" : "tap to continue";
