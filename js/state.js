@@ -22,7 +22,9 @@
       beat: null,
       joined: [],
       decision: null,
-      resolvedDecisions: []
+      resolvedDecisions: [],
+      talkReturn: null,
+      heardLines: {}
     };
   }
 

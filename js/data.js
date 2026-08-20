@@ -178,7 +178,12 @@
           afterBeat: 1,
           prompt: "The room is filling. Where does the table settle?",
           choices: ["Sit at the bar", "Take the back table", "Stay on your feet"],
-          allowText: true
+          allowText: true,
+          after: {
+            "Sit at the bar": "Mara slides stew down the oak and pretends not to count the badges.",
+            "Take the back table": "The back table has a lamp, a wall, and a clean view of the door.",
+            "Stay on your feet": "You keep your boots. The room fills. Nobody asks you to sit."
+          }
         }
       ],
       present: ["mara", "aldren", "lir"],
@@ -217,7 +222,11 @@
           prompt: "Two barge-hands are arguing over a crate. Who leans in?",
           choices: ["Listen", "Walk past"],
           allowText: true,
-          reacts: ["I watch the door", "I create a distraction"]
+          reacts: ["I watch the door", "I create a distraction"],
+          after: {
+            "Listen": "You catch two voices over a crate. The hall can wait a breath.",
+            "Walk past": "You let the barge-hands keep their crate. The quay goes on."
+          }
         }
       ],
       present: ["sera", "durne", "brann"],
@@ -254,7 +263,13 @@
           afterBeat: 1,
           prompt: "The houses are taking their places. Which banner do we stand near?",
           choices: ["House Vell", "House Dreth", "House Calren", "The host-lord"],
-          allowText: true
+          allowText: true,
+          after: {
+            "House Vell": "You take a place near Vell’s colors. Familiar cloth.",
+            "House Dreth": "Dreth’s banner hangs like a funeral that learned to stand.",
+            "House Calren": "Calren’s silk catches the light. Someone is already smiling at you.",
+            "The host-lord": "You stand where Pellane can see you. Gold chain, river-cold eyes."
+          }
         }
       ],
       present: ["pava", "sera", "lir", "kell", "tolla", "ise", "dreth", "ysolde", "corin"],
@@ -416,6 +431,13 @@
     lir: { skin: "#d0b090", hair: "#3a2a20", tunic: "#5a4a38", tunic2: "#3a2e24", pants: "#3a3024", boots: "#1c1610", accent: "#2a2a28" },
     mara: { skin: "#c49870", hair: "#4a2418", tunic: "#8a5a30", tunic2: "#5a3818", pants: "#4a3424", boots: "#2a1c12", accent: "#c4b08a" }
   };
+
+  NB.TALK_REPLIES = [
+    "We hear you.",
+    "What do you need?",
+    "We'll keep it quiet.",
+    "Just passing through."
+  ];
 
   NB.PC_COLORS = ["#3d8a82", "#c9a15b", "#8a3a2a", "#4a6aaa", "#7a4a8a", "#4a7a3a"];
 })(window.NB = window.NB || {});

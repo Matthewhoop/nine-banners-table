@@ -11,6 +11,7 @@
   var canvas, ctx;
   var lastTs = 0;
   var viewW = 240, viewH = 160, dpr = 1;
+  var peerSeenAt = 0;
   var reduceMotion = false;
   try {
     reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -80,28 +81,49 @@
     var key = myKey();
     if (!key || key === "guest") return;
     S.joined = S.joined || [];
-    var exists = S.joined.some(function (j) {
+    var found = -1;
+    S.joined.forEach(function (j, i) {
       var k = typeof j === "string" ? j : (j.key || "");
-      return String(k).toLowerCase() === key;
+      if (String(k).toLowerCase() === key) found = i;
     });
-    if (!exists) S.joined.push({ key: key, name: displayName(), at: Date.now() });
+    if (found >= 0) {
+      var prev = S.joined[found];
+      if (typeof prev === "string") S.joined[found] = { key: key, name: displayName(), at: Date.now() };
+      else { prev.at = Date.now(); prev.name = displayName(); prev.key = key; }
+    } else {
+      S.joined.push({ key: key, name: displayName(), at: Date.now() });
+    }
   }
   function joinedVoterKeys() {
+    return liveJoinedKeys();
+  }
+  function liveJoinedKeys() {
+    var now = Date.now();
+    var staleMs = 20 * 60 * 1000;
     var keys = {};
+    var me = myKey();
     (S.joined || []).forEach(function (j) {
       var k = (typeof j === "string" ? j : (j.key || j.name || "")).trim().toLowerCase();
-      if (k && k !== "dm" && k !== "guest") keys[k] = true;
+      if (!k || k === "dm" || k === "guest") return;
+      if (k === me) { keys[k] = true; return; }
+      if (typeof j === "string") return;
+      var at = j.at || 0;
+      if (at && (now - at) <= staleMs) keys[k] = true;
     });
     return keys;
   }
   function expectedGroupVoters() {
+    var live = liveJoinedKeys();
+    var liveCount = Object.keys(live).length;
+    if (liveCount <= 1) return 1;
     var party = S.party || [];
     if (party.length <= 1) return 1;
-    var joinedKeys = joinedVoterKeys();
+    var peersLive = peerSeenAt && (Date.now() - peerSeenAt) < 30000;
+    if (!peersLive) return 1;
     var n = 0;
     party.forEach(function (p) {
       var nk = String(p.name || "").trim().toLowerCase();
-      if (nk && joinedKeys[nk]) n += 1;
+      if (nk && live[nk]) n += 1;
     });
     return n <= 1 ? 1 : n;
   }
@@ -137,7 +159,12 @@
       submissions: {},
       status: "open",
       called: !!called,
-      sceneId: S.sceneId
+      sceneId: S.sceneId,
+      after: spec.after || null,
+      talk: !!spec.talk,
+      npcId: spec.npcId || null,
+      heardLine: spec.heardLine || null,
+      textLabel: spec.textLabel || null
     };
   }
   function authoredLines(sc) {
@@ -168,6 +195,8 @@
   function syncSceneDecision() {
     if (isFaceoff()) return false;
     if (S.decision && S.decision.status === "open") return false;
+    if (S.beat && S.beat.talk) return false;
+    if (S.talkReturn) return false;
     var d = sceneDecisionForBeat();
     if (!d) return false;
     if ((S.resolvedDecisions || []).indexOf(d.id) >= 0) return false;
@@ -214,26 +243,107 @@
     var ta = $("dec-text");
     if (ta && isActor()) ta.focus();
   }
+  function playerHasVoted() {
+    var mine = mineSubmission();
+    return !!(mine && ((mine.choice && String(mine.choice).trim()) || (mine.text && String(mine.text).trim())));
+  }
+  function cloneBeat(b) {
+    if (!b) return null;
+    return {
+      speakerId: b.speakerId || null,
+      lines: (b.lines || []).slice(),
+      index: b.index | 0,
+      talk: !!b.talk,
+      followId: b.followId || null,
+      followLine: b.followLine || null
+    };
+  }
+  function cloneDecision(d) {
+    if (!d) return null;
+    try { return JSON.parse(JSON.stringify(d)); } catch (e) { return d; }
+  }
+  function winningChoice(d) {
+    d = d || S.decision;
+    var list = submissionList(d);
+    if (!list.length) return "";
+    if (d && d.kind === "solo") {
+      var act = null;
+      list.forEach(function (s) { if (s.role === "act" && !act) act = s; });
+      return (act && act.choice) || "";
+    }
+    var counts = {};
+    var best = "", n = 0;
+    list.forEach(function (s) {
+      if (!s.choice) return;
+      counts[s.choice] = (counts[s.choice] || 0) + 1;
+      if (counts[s.choice] > n) { n = counts[s.choice]; best = s.choice; }
+    });
+    return best || (list[0] && list[0].choice) || "";
+  }
+  function pickAftermath(d) {
+    d = d || S.decision;
+    if (!d) return "";
+    var map = d.after || {};
+    var choice = winningChoice(d);
+    if (choice && map[choice]) return map[choice];
+    if (map["*"]) return map["*"];
+    return "The table takes that as the move.";
+  }
+  function youSaidLine(act) {
+    if (!act) return "You let that hang.";
+    var said = (act.text && String(act.text).trim()) || act.choice;
+    if (said) return "You said " + said;
+    return "You let that hang.";
+  }
+  function pickNpcFollow(id, heard) {
+    var n = NB.NPCS[id];
+    if (!n || !n.lines || !n.lines.length) return "";
+    var used = ((S.heardLines || {})[id] || []).slice();
+    if (heard) used.push(heard);
+    var unused = n.lines.filter(function (l) { return used.indexOf(l) < 0; });
+    if (!unused.length) unused = n.lines.filter(function (l) { return l !== heard; });
+    if (!unused.length) return "";
+    return unused[Math.floor(Math.random() * unused.length)];
+  }
+  function markHeard(id, line) {
+    if (!id || !line) return;
+    S.heardLines = S.heardLines || {};
+    S.heardLines[id] = S.heardLines[id] || [];
+    if (S.heardLines[id].indexOf(line) < 0) S.heardLines[id].push(line);
+  }
   function upsertSubmission(role, choice, text) {
     var d = S.decision;
     if (!d) return;
+    markJoined();
     var key = myKey();
     var prev = (d.submissions || {})[key] || {};
+    var nextChoice = choice || prev.choice || null;
+    var nextText = text != null ? String(text).trim() : (prev.text || "");
+    var already = !!(prev && ((prev.choice && String(prev.choice).trim()) || (prev.text && String(prev.text).trim())));
+    if (already && (nextChoice === (prev.choice || null)) && nextText === (prev.text || "") && canPlayerContinue()) {
+      resolveDecision(false);
+      return;
+    }
     d.submissions = d.submissions || {};
     d.submissions[key] = {
       who: displayName(),
       pcId: (myPc() && myPc().id) || prev.pcId || null,
       role: role,
-      choice: choice || prev.choice || null,
-      text: text != null ? String(text).trim() : (prev.text || ""),
+      choice: nextChoice,
+      text: nextText,
       at: Date.now()
     };
     persist();
-    if (shouldAutoResolve()) {
+    if (shouldAutoResolve() || (playerHasVoted() && expectedGroupVoters() <= 1 && d.kind !== "solo")) {
+      resolveDecision(false);
+      return;
+    }
+    if (d.kind === "solo" && actorSubmitted()) {
       resolveDecision(false);
       return;
     }
     renderDecision();
+    renderCaption();
   }
   function decisionSummary(d) {
     d = d || S.decision;
@@ -272,13 +382,60 @@
   function canPlayerContinue() {
     if (!decisionOpen()) return false;
     if (isDM()) return true;
-    if (S.decision.kind === "solo") return actorSubmitted();
-    return groupVoteCount() > 0;
+    if (S.decision.kind === "solo") return actorSubmitted() || (isActor() && playerHasVoted());
+    return playerHasVoted() || groupVoteCount() > 0;
+  }
+  function finishBeatReset() {
+    lastBeatSig = beatSig();
+    localShown = reduceMotion ? 9999 : 0;
+    typeAcc = 0;
+  }
+  function returnFromTalk() {
+    var ret = S.talkReturn;
+    S.talkReturn = null;
+    if (ret && ret.beat && ret.beat.lines && ret.beat.lines.length) {
+      setBeat(ret.beat, true);
+      if (ret.decision && ret.decision.status === "open" && !(ret.decision.talk)) {
+        S.decision = ret.decision;
+      }
+    } else {
+      setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
+    }
+    persist();
+    renderChrome();
+  }
+  function resolveTalk(d, skipped) {
+    var list = submissionList(d);
+    var act = null;
+    list.forEach(function (s) { if (s.role === "act" && !act) act = s; });
+    if (!act) act = list[0] || null;
+    var said = skipped && !act ? "You let that hang." : youSaidLine(act);
+    var follow = skipped ? "" : pickNpcFollow(d.npcId, d.heardLine);
+    if (follow) markHeard(d.npcId, follow);
+    S.resolvedDecisions = S.resolvedDecisions || [];
+    if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
+    S.decision = null;
+    S.lastAction = said;
+    setBeat({
+      speakerId: null,
+      lines: [said],
+      index: 0,
+      talk: true,
+      followId: follow ? d.npcId : null,
+      followLine: follow || null
+    }, true);
+    persist();
+    renderChrome();
   }
   function resolveDecision(skipped) {
     var d = S.decision;
     if (!d) return;
+    if (d.talk) {
+      resolveTalk(d, skipped);
+      return;
+    }
     var summary = skipped && !submissionList(d).length ? "" : decisionSummary(d);
+    var after = skipped && !summary ? "" : pickAftermath(d);
     S.resolvedDecisions = S.resolvedDecisions || [];
     if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
     S.decision = null;
@@ -286,24 +443,29 @@
     ensureBeat();
     var lines = (S.beat.lines || []).slice();
     var idx = S.beat.index | 0;
-    if (summary) {
-      var nextLine = lines[idx + 1];
-      if (lines[idx] !== summary && nextLine !== summary) {
-        lines = lines.slice(0, idx + 1).concat([summary], lines.slice(idx + 1));
-      }
+    var extras = [];
+    if (summary && lines[idx] !== summary && lines[idx + 1] !== summary) extras.push(summary);
+    if (after && after !== summary && extras.indexOf(after) < 0 && lines[idx] !== after && lines[idx + 1] !== after) {
+      extras.push(after);
+    }
+    if (!extras.length && idx >= lines.length - 1) {
+      extras.push(after || summary || "The table takes that as the move.");
+    }
+    if (extras.length) {
+      lines = lines.slice(0, idx + 1).concat(extras, lines.slice(idx + 1));
       S.beat.lines = lines;
-      S.beat.index = (lines[idx] === summary) ? idx : idx + 1;
+      S.beat.speakerId = null;
+      S.beat.index = idx + extras.length;
     } else if (idx < lines.length - 1) {
       S.beat.index = idx + 1;
     }
-    lastBeatSig = beatSig();
-    localShown = reduceMotion ? 9999 : 0;
-    typeAcc = 0;
+    finishBeatReset();
     persist();
     renderChrome();
   }
   function renderChromeLight() {
     $("story-page").classList.toggle("has-decision", decisionOpen());
+    $("story-page").classList.toggle("can-continue", !!(decisionOpen() && (canPlayerContinue() || playerHasVoted())));
   }
   function tallyHtml(d) {
     var list = submissionList(d);
@@ -379,6 +541,7 @@
       el.classList.add("hidden");
       el.innerHTML = "";
       $("story-page").classList.remove("has-decision");
+      $("story-page").classList.remove("can-continue");
       return;
     }
     $("story-page").classList.add("has-decision");
@@ -396,13 +559,16 @@
       selEnd = $("dec-text").selectionEnd;
     }
     var html = "<div class='dec-body'>";
-    var badge = d.kind === "solo" ? "One blade" : "The table";
-    html += "<div class='dec-head'><span class='dec-badge " + d.kind + "'>" + badge + "</span>";
+    var badge = d.talk ? "Speak" : (d.kind === "solo" ? "One blade" : "The table");
+    var badgeKind = d.talk ? "talk" : d.kind;
+    html += "<div class='dec-head'><span class='dec-badge " + badgeKind + "'>" + badge + "</span>";
     html += "<p class='dec-prompt'>" + escapeHtml(d.prompt) + "</p></div>";
 
     var iAmActor = isActor();
     var hasActor = !!(d.actorName);
     var mine = mineSubmission();
+    var voted = playerHasVoted();
+    var textLabel = d.textLabel || (d.talk ? "What do you say?" : "What do you do?");
 
     if (d.kind === "solo" && !hasActor) {
       html += "<p class='dec-status'>One blade takes this. The others can react after.</p>";
@@ -416,8 +582,10 @@
       } else if (isDM()) {
         html += "<p class='dec-status'>No blades on the roster yet — a player can tap I do this, or add a blade on Party.</p>";
       }
+    } else if (d.kind === "solo" && hasActor && iAmActor && voted) {
+      html += "<p class='dec-status'>You sent that. Tap Continue — or the caption — to move on.</p>";
     } else if (d.kind === "solo" && hasActor && iAmActor) {
-      html += "<p class='dec-status'>You are acting" + (mine && (mine.choice || mine.text) ? " · sent" : "") + ".</p>";
+      html += "<p class='dec-status'>You are acting.</p>";
       if (d.choices && d.choices.length) {
         html += "<div class='dec-choices'>";
         d.choices.forEach(function (c) {
@@ -426,7 +594,7 @@
         html += "</div>";
       }
       if (d.allowText !== false) {
-        html += "<div class='dec-field'><label for='dec-text'>What do you do?</label>";
+        html += "<div class='dec-field'><label for='dec-text'>" + escapeHtml(textLabel) + "</label>";
         html += "<textarea id='dec-text' maxlength='280' placeholder='Type it.'>" + escapeHtml(decDraft.text) + "</textarea></div>";
       }
       html += "<div class='dec-actions'><button type='button' class='btn brass' id='dec-send'>Send</button></div>";
@@ -442,6 +610,8 @@
       html += "<div class='dec-field'><label for='dec-text'>Or type it</label>";
       html += "<textarea id='dec-text' maxlength='200' placeholder='I watch the door…'>" + escapeHtml(decDraft.text) + "</textarea></div>";
       html += "<div class='dec-actions'><button type='button' class='btn ink' id='dec-send'>Send react</button></div>";
+    } else if (voted) {
+      html += "<p class='dec-status'>You sent that. Tap Continue — or the caption — to move on.</p>";
     } else {
       html += "<p class='dec-status'>Everyone at the table. Pick, type, or both.</p>";
       if (d.choices && d.choices.length) {
@@ -452,7 +622,7 @@
         html += "</div>";
       }
       if (d.allowText !== false) {
-        html += "<div class='dec-field'><label for='dec-text'>What do you do?</label>";
+        html += "<div class='dec-field'><label for='dec-text'>" + escapeHtml(textLabel) + "</label>";
         html += "<textarea id='dec-text' maxlength='280' placeholder='Type it.'>" + escapeHtml(decDraft.text) + "</textarea></div>";
       }
       html += "<div class='dec-actions'><button type='button' class='btn brass' id='dec-send'>Send</button></div>";
@@ -464,7 +634,7 @@
     }
     html += "</div>";
 
-    if (isDM() || canPlayerContinue()) {
+    if (isDM() || canPlayerContinue() || voted) {
       html += "<div class='dec-advance'><div class='dec-actions'>";
       html += "<button type='button' class='btn brass' id='dec-continue'>Continue</button>";
       if (isDM()) html += "<button type='button' class='btn slim' id='dec-skip'>Skip</button>";
@@ -537,6 +707,7 @@
       S.stageMode = "story";
       S.faceoff = null;
       S.decision = null;
+      S.talkReturn = null;
       setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
     }
   }
@@ -551,6 +722,7 @@
     $("dm-stage-tools").classList.toggle("hidden", !isDM());
     $("btn-add-pc").classList.toggle("hidden", !isDM());
     $("party-lede").textContent = isDM() ? "Every blade at the table. Thumbs on the HP." : "Your contract. Your blood.";
+    $("story-page").classList.toggle("can-continue", !!(decisionOpen() && (canPlayerContinue() || playerHasVoted())));
     $("story-page").classList.toggle("faceoff", isFaceoff());
     $("faceoff-ui").classList.toggle("hidden", !isFaceoff());
     $("cast-strip").classList.toggle("hidden", isFaceoff());
@@ -563,6 +735,7 @@
     renderCast();
     renderCaption();
     renderDecision();
+    renderChromeLight();
     renderHpStrip();
     if (isFaceoff()) renderFaceoffUI();
     fitCanvas();
@@ -637,6 +810,31 @@
     });
   }
 
+  function paintCaptionHint() {
+    var hint = $("cap-hint");
+    if (!hint || !S.beat) return;
+    var full = currentLine();
+    var more = localShown < full.length || (S.beat.index | 0) < ((S.beat.lines || []).length - 1);
+    var canGo = !!(decisionOpen() && (canPlayerContinue() || playerHasVoted()));
+    var talkMore = !!(S.beat.followLine || S.beat.talk || S.talkReturn);
+    if (localShown < full.length) {
+      hint.classList.remove("hidden");
+      hint.textContent = "tap to finish";
+      return;
+    }
+    if (decisionOpen()) {
+      hint.classList.remove("hidden");
+      hint.textContent = canGo ? "tap to continue" : "a decision waits";
+      return;
+    }
+    if (more || talkMore) {
+      hint.classList.remove("hidden");
+      hint.textContent = "tap to continue";
+      return;
+    }
+    hint.classList.add("hidden");
+    hint.textContent = "tap to continue";
+  }
   function renderCaption() {
     ensureBeat();
     var sc = scene();
@@ -658,21 +856,42 @@
     var full = currentLine();
     if (localShown > full.length) localShown = full.length;
     $("cap-nar").textContent = full.slice(0, localShown);
-    var more = localShown < full.length || (S.beat.index | 0) < (S.beat.lines.length - 1);
-    if (decisionOpen() && localShown >= full.length) {
-      $("cap-hint").classList.remove("hidden");
-      $("cap-hint").textContent = canPlayerContinue() ? "tap to continue" : "a decision waits";
-    } else {
-      $("cap-hint").classList.toggle("hidden", !more);
-      $("cap-hint").textContent = localShown < full.length ? "tap to finish" : "tap to continue";
-    }
+    paintCaptionHint();
   }
 
   function hearNpc(id) {
     var n = NB.NPCS[id];
-    if (!n || !n.lines || !n.lines.length) return;
-    var pick = n.lines[Math.floor(Math.random() * n.lines.length)];
-    setBeat({ speakerId: id, lines: [pick], index: 0 }, true);
+    if (!n || !n.lines || !n.lines.length || isFaceoff()) return;
+    var unused = n.lines.filter(function (l) {
+      return ((S.heardLines || {})[id] || []).indexOf(l) < 0;
+    });
+    var pool = unused.length ? unused : n.lines;
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    markHeard(id, pick);
+    if (!S.talkReturn) {
+      S.talkReturn = {
+        beat: cloneBeat(S.beat),
+        decision: (S.decision && S.decision.status === "open" && !S.decision.talk) ? cloneDecision(S.decision) : null
+      };
+    } else if (S.decision && S.decision.status === "open" && !S.decision.talk) {
+      S.talkReturn.decision = cloneDecision(S.decision);
+    }
+    var me = myPc();
+    setBeat({ speakerId: id, lines: [pick], index: 0, talk: true }, true);
+    S.decision = makeLiveDecision({
+      id: "talk-" + id + "-" + Date.now().toString(36),
+      kind: "solo",
+      prompt: "What do you say to " + (n.name.split(" ")[0] || n.name) + "?",
+      choices: (NB.TALK_REPLIES || []).slice(),
+      allowText: true,
+      reacts: ["I listen", "I watch the room"],
+      actorName: displayName(),
+      actorId: me ? me.id : null,
+      talk: true,
+      npcId: id,
+      heardLine: pick,
+      textLabel: "What do you say?"
+    }, false);
     persist();
     renderChrome();
   }
@@ -686,10 +905,10 @@
       return;
     }
     if (decisionOpen()) {
-      if (canPlayerContinue()) resolveDecision(false);
+      if (canPlayerContinue() || playerHasVoted()) resolveDecision(false);
       return;
     }
-    if ((S.beat.index | 0) < S.beat.lines.length - 1) {
+    if ((S.beat.index | 0) < (S.beat.lines || []).length - 1) {
       S.beat.index = (S.beat.index | 0) + 1;
       lastBeatSig = beatSig();
       localShown = reduceMotion ? 9999 : 0;
@@ -698,6 +917,18 @@
       renderCaption();
       syncSceneDecision();
       renderDecision();
+      return;
+    }
+    if (S.beat && S.beat.followLine) {
+      var fid = S.beat.followId;
+      var fl = S.beat.followLine;
+      setBeat({ speakerId: fid, lines: [fl], index: 0, talk: true }, true);
+      persist();
+      renderChrome();
+      return;
+    }
+    if (S.talkReturn || (S.beat && S.beat.talk)) {
+      returnFromTalk();
     }
   }
 
@@ -861,6 +1092,7 @@
     S.stageMode = "story";
     S.faceoff = null;
     S.lastAction = "";
+    S.talkReturn = null;
     setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
     persist();
     renderChrome();
@@ -945,17 +1177,7 @@
         }
         var el = $("cap-nar");
         if (el) el.textContent = full.slice(0, localShown);
-        var more = localShown < full.length || (S.beat.index | 0) < (S.beat.lines.length - 1);
-        var hint = $("cap-hint");
-        if (hint) {
-          if (decisionOpen() && localShown >= full.length) {
-            hint.classList.remove("hidden");
-            hint.textContent = canPlayerContinue() ? "tap to continue" : "a decision waits";
-          } else {
-            hint.classList.toggle("hidden", !more);
-            hint.textContent = localShown < full.length ? "tap to finish" : "tap to continue";
-          }
-        }
+        paintCaptionHint();
       }
     }
     draw();
@@ -978,6 +1200,7 @@
     S.faceoff = null;
     S.lastAction = "";
     S.decision = null;
+    S.talkReturn = null;
     var scDecIds = (sc.decisions || []).map(function (d) { return d.id; });
     S.resolvedDecisions = (S.resolvedDecisions || []).filter(function (rid) {
       return scDecIds.indexOf(rid) < 0;
@@ -1027,6 +1250,7 @@
         var meta = NB.FACEOFF_KINDS.find(function (k) { return k.id === kind; });
         S.stageMode = "faceoff";
         S.decision = null;
+        S.talkReturn = null;
         S.faceoff = { kind: kind, opponentId: $("fo-opp").value, title: meta.label, sub: meta.sub };
         S.lastAction = meta.sub;
         setBeat({ speakerId: S.faceoff.opponentId, lines: [meta.sub], index: 0 }, true);
@@ -1292,6 +1516,7 @@
   }
 
   NB.onRemoteState(function (next) {
+    peerSeenAt = Date.now();
     S = next;
     if (S.stageMode === "overworld") S.stageMode = "story";
     if (beatSig() !== lastBeatSig) {
