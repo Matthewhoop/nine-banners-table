@@ -505,8 +505,47 @@
     renderCast();
     renderCaption();
     renderDecision();
+    renderHpStrip();
     if (isFaceoff()) renderFaceoffUI();
     fitCanvas();
+  }
+
+  function renderHpStrip() {
+    var el = $("hp-strip");
+    if (!el) return;
+    var pcs = visibleParty();
+    if (!S.party.length || !pcs.length) {
+      el.classList.add("hidden");
+      el.innerHTML = "";
+      el.setAttribute("aria-hidden", "true");
+      return;
+    }
+    el.classList.remove("hidden");
+    el.removeAttribute("aria-hidden");
+    var me = myPc();
+    var dm = isDM();
+    el.innerHTML = pcs.map(function (pc) {
+      var max = Math.max(1, pc.maxHp | 0);
+      var hp = Math.max(0, pc.hp | 0);
+      var pct = Math.max(0, Math.min(100, (hp / max) * 100));
+      var tone = hp <= 0 ? "down" : (pct <= 25 ? "low" : (pct <= 50 ? "mid" : "ok"));
+      var mine = me && me.id === pc.id ? " mine" : "";
+      var html = "<div class='hp-chip " + tone + mine + "' data-pc='" + escapeAttr(pc.id) + "'>";
+      html += "<button type='button' class='hp-chip-main' data-open-party='" + escapeAttr(pc.id) + "'>";
+      html += "<span class='hp-chip-pip' style='background:" + escapeAttr(pc.color || "#c9a15b") + "'></span>";
+      html += "<span class='hp-chip-meta'><span class='hp-chip-name'>" + escapeHtml(pc.name) + "</span>";
+      html += "<span class='hp-chip-nums'>" + hp + "/" + max + "</span></span>";
+      html += "<span class='hp-mini' aria-hidden='true'><i style='width:" + pct + "%'></i></span>";
+      html += "</button>";
+      if (dm) {
+        html += "<div class='hp-chip-bumps'>";
+        html += "<button type='button' class='hp-chip-bump' data-hp='-1' data-pc='" + escapeAttr(pc.id) + "' aria-label='Hurt " + escapeAttr(pc.name) + "'>−</button>";
+        html += "<button type='button' class='hp-chip-bump' data-hp='1' data-pc='" + escapeAttr(pc.id) + "' aria-label='Heal " + escapeAttr(pc.name) + "'>+</button>";
+        html += "</div>";
+      }
+      html += "</div>";
+      return html;
+    }).join("");
   }
 
   function renderCast() {
@@ -659,6 +698,7 @@
         renderParty();
       });
     });
+    renderHpStrip();
   }
 
   function pcCard(pc) {
@@ -1153,6 +1193,16 @@
     $("btn-faceoff").addEventListener("click", openFaceoffPick);
     $("btn-call-dec").addEventListener("click", openCallDecision);
     $("btn-add-pc").addEventListener("click", function () { openPcEditor(null); });
+    $("hp-strip").addEventListener("click", function (ev) {
+      var bump = ev.target.closest("[data-hp]");
+      if (bump) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        bumpHp(bump.getAttribute("data-pc"), parseInt(bump.getAttribute("data-hp"), 10));
+        return;
+      }
+      if (ev.target.closest("[data-pc], [data-open-party]")) setPanel("party");
+    });
     $("story-caption").addEventListener("click", tapCaption);
     $("story-art").addEventListener("click", function (ev) {
       if (ev.target.closest(".cast-card")) return;
