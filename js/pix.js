@@ -207,19 +207,75 @@
     }
   }
 
-  NB.drawSceneBg = function (ctx, scene, mode) {
-    ctx.imageSmoothingEnabled = false;
-    var img = null;
-    if (mode === "faceoff" && images.faceoff) img = images.faceoff;
-    else if (scene) {
-      if (scene.id === "inn" && images.inn) img = images.inn;
-      else if (scene.id === "quay" && images.quay) img = images.quay;
-      else if (scene.id === "hall" && images.hall) img = images.hall;
-      else if (scene.id === "banquet" && images.faceoff) img = images.faceoff;
-      else if ((scene.id === "procession" || scene.id === "pellane") && images.quay) img = images.quay;
+  function pickSceneImage(scene, mode) {
+    if (mode === "faceoff" && images.faceoff) return images.faceoff;
+    if (!scene) return null;
+    if (scene.id === "inn" && images.inn) return images.inn;
+    if (scene.id === "quay" && images.quay) return images.quay;
+    if (scene.id === "hall" && images.hall) return images.hall;
+    if (scene.id === "banquet" && images.faceoff) return images.faceoff;
+    if ((scene.id === "procession" || scene.id === "pellane") && images.quay) return images.quay;
+    return null;
+  }
+
+  function coverDraw(ctx, src, destW, destH) {
+    var ir = src.width / src.height;
+    var cr = destW / destH;
+    var dw, dh, dx, dy;
+    if (ir > cr) {
+      dh = destH; dw = destH * ir; dx = (destW - dw) / 2; dy = 0;
+    } else {
+      dw = destW; dh = destW / ir; dx = 0; dy = (destH - dh) / 2;
     }
-    if (img) ctx.drawImage(img, 0, 0, W, H);
-    else paintFallback(ctx, scene || { id: "bridge" });
+    ctx.drawImage(src, dx, dy, dw, dh);
+  }
+
+  NB.drawSceneCover = function (ctx, scene, mode, destW, destH) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = "#070806";
+    ctx.fillRect(0, 0, destW, destH);
+    var img = pickSceneImage(scene, mode);
+    if (img) {
+      coverDraw(ctx, img, destW, destH);
+    } else {
+      var tmp = document.createElement("canvas");
+      tmp.width = W;
+      tmp.height = H;
+      paintFallback(tmp.getContext("2d"), scene || { id: "bridge" });
+      coverDraw(ctx, tmp, destW, destH);
+    }
+    var g = ctx.createLinearGradient(0, destH * 0.58, 0, destH);
+    g.addColorStop(0, "rgba(6,6,4,0)");
+    g.addColorStop(1, "rgba(6,6,4,0.5)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, destW, destH);
+  };
+
+  NB.drawSceneBg = function (ctx, scene, mode) {
+    NB.drawSceneCover(ctx, scene, mode, W, H);
+  };
+
+  NB.paintPortrait = function (canvas, id) {
+    if (!canvas) return;
+    var c = canvas.getContext("2d");
+    c.imageSmoothingEnabled = false;
+    c.clearRect(0, 0, canvas.width, canvas.height);
+    c.fillStyle = "#0c0a08";
+    c.fillRect(0, 0, canvas.width, canvas.height);
+    var spr = sprites[id] || (id === "player" ? sprites.player : null);
+    if (spr) {
+      var cropH = Math.max(8, Math.floor(spr.height * 0.46));
+      var cropY = Math.floor(spr.height * 0.02);
+      var scale = canvas.height / cropH;
+      var dw = Math.round(spr.width * scale);
+      c.drawImage(spr, 0, cropY, spr.width, cropH, Math.round((canvas.width - dw) / 2), 0, dw, canvas.height);
+    } else {
+      c.save();
+      var sc = canvas.height / 22;
+      c.translate(Math.round((canvas.width - 16 * sc) / 2), Math.round(canvas.height * 0.06));
+      fallbackPerson(c, NB.LOOKS[id] || NB.LOOKS.player, sc);
+      c.restore();
+    }
   };
 
   NB.walkable = function (scene, x, y) {

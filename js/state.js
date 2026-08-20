@@ -11,7 +11,7 @@
       pin: NB.DEFAULT_PIN,
       tableCode: NB.TABLE_CODE,
       sceneId: "inn",
-      stageMode: "overworld",
+      stageMode: "story",
       faceoff: null,
       party: [],
       px: 118,
@@ -19,6 +19,7 @@
       facing: "down",
       lastRoll: null,
       lastAction: "",
+      beat: null,
       joined: []
     };
   }

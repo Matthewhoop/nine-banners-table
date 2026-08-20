@@ -167,6 +167,10 @@
     inn: {
       id: "inn", name: "The Low Quay", art: "art/inn.png",
       narration: "Stew and barge-talk. Mara behind the bar. Your badges are new. The first toast is tomorrow night.",
+      beats: [
+        "Stew and barge-talk. Mara behind the bar.",
+        "Your badges are new. The first toast is tomorrow night."
+      ],
       present: ["mara", "aldren", "lir"],
       spawn: { x: 118, y: 108 },
       npcs: [
@@ -191,6 +195,10 @@
     quay: {
       id: "quay", name: "Pellane Quay", art: "art/quay.png",
       narration: "The river is high and brown. Banners going up. Dawn on the fork. Sera briefs her blades before the hall opens.",
+      beats: [
+        "The river is high and brown. Banners going up. Dawn on the fork.",
+        "Sera briefs her blades before the hall opens."
+      ],
       present: ["sera", "durne", "brann"],
       spawn: { x: 120, y: 100 },
       npcs: [
@@ -214,6 +222,10 @@
     hall: {
       id: "hall", name: "Granary-Hall", art: "art/hall.png",
       narration: "Day 1. Petitions. Each house reads what they want the treaty to say. The hall is open. The quay is louder.",
+      beats: [
+        "Day 1. Petitions. Each house reads what they want the treaty to say.",
+        "The hall is open. The quay is louder."
+      ],
       present: ["pava", "sera", "lir", "kell", "tolla", "ise", "dreth", "ysolde", "corin"],
       spawn: { x: 120, y: 118 },
       npcs: [
@@ -239,6 +251,10 @@
     bridge: {
       id: "bridge", name: "The Side-Deal Bridge", art: null,
       narration: "Between the public hours: “accidental” meetings on the stones. The river talks under your boots.",
+      beats: [
+        "Between the public hours: “accidental” meetings on the stones.",
+        "The river talks under your boots."
+      ],
       present: ["ise", "aldren", "ysolde"],
       spawn: { x: 120, y: 100 },
       npcs: [
@@ -262,6 +278,10 @@
     banquet: {
       id: "banquet", name: "The Closing Banquet", art: "art/faceoff.png",
       narration: "Nine toasts. A hymn to the river. Gold, wine, and watching eyes. The draft is still a draft.",
+      beats: [
+        "Nine toasts. A hymn to the river. Gold, wine, and watching eyes.",
+        "The draft is still a draft."
+      ],
       present: ["pava", "sera", "aldren", "dreth", "ise", "kell", "tolla", "ysolde"],
       spawn: { x: 120, y: 118 },
       npcs: [
@@ -286,6 +306,10 @@
     procession: {
       id: "procession", name: "River Procession", art: "art/quay.png",
       narration: "Barges, blessings, the draft carried toward the ford-shrine. Setup and hymns. After this, people go home and see if the paper holds.",
+      beats: [
+        "Barges, blessings, the draft carried toward the ford-shrine.",
+        "Setup and hymns. After this, people go home and see if the paper holds."
+      ],
       present: ["kell", "pava", "sera", "tolla"],
       spawn: { x: 110, y: 108 },
       npcs: [
@@ -309,6 +333,10 @@
     pellane: {
       id: "pellane", name: "Pellane", art: "art/quay.png",
       narration: "Fork city. Granaries, three bridges, a civic hall that used to be a grain store. Cousins who “just happened to be passing through.”",
+      beats: [
+        "Fork city. Granaries, three bridges, a civic hall that used to be a grain store.",
+        "Cousins who “just happened to be passing through.”"
+      ],
       present: ["durne", "mara"],
       spawn: { x: 120, y: 104 },
       npcs: [

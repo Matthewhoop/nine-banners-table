@@ -3,18 +3,23 @@
   var S = NB.loadState();
   var sess = NB.loadSession() || { role: null, name: "", pin: "" };
   var panel = "stage";
-  var keys = { up: false, down: false, left: false, right: false };
   var t = 0;
-  var walking = false;
-  var dialogue = null; // { npcId, line, shown, full }
+  var localShown = 0;
   var typeAcc = 0;
-  var canvas, ctx, bust;
+  var lastBeatSig = "";
+  var canvas, ctx;
   var lastTs = 0;
+  var viewW = 240, viewH = 160, dpr = 1;
+  var reduceMotion = false;
+  try {
+    reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch (e) { reduceMotion = false; }
 
   function $(id) { return document.getElementById(id); }
   function scene() { return NB.SCENES[S.sceneId] || NB.SCENES.inn; }
   function isDM() { return sess.role === "dm"; }
   function persist() { NB.saveState(S, true); }
+  function isFaceoff() { return S.stageMode === "faceoff"; }
 
   function myPc() {
     if (!sess.name) return S.party[0] || null;
@@ -26,6 +31,38 @@
     if (isDM()) return S.party;
     var me = myPc();
     return me ? [me] : [];
+  }
+
+  function sceneBeats(sc) {
+    if (sc && sc.beats && sc.beats.length) return sc.beats.slice();
+    return [(sc && sc.narration) || ""];
+  }
+
+  function beatSig(b) {
+    b = b || S.beat || {};
+    return String(b.speakerId || "") + "|" + (b.index || 0) + "|" + ((b.lines || []).join("\n"));
+  }
+
+  function setBeat(beat, resetType) {
+    S.beat = beat;
+    lastBeatSig = beatSig(beat);
+    if (resetType !== false) {
+      localShown = reduceMotion ? 9999 : 0;
+      typeAcc = 0;
+    }
+  }
+
+  function ensureBeat() {
+    if (!S.beat || !S.beat.lines || !S.beat.lines.length) {
+      setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
+    }
+  }
+
+  function currentLine() {
+    ensureBeat();
+    var lines = S.beat.lines || [];
+    var i = Math.max(0, Math.min(lines.length - 1, S.beat.index | 0));
+    return lines[i] || "";
   }
 
   /* ——— Join ——— */
@@ -59,8 +96,9 @@
         persist();
       }
     }
-    var sc = scene();
-    if (S.px == null) { S.px = sc.spawn.x; S.py = sc.spawn.y; }
+    if (S.stageMode === "overworld") S.stageMode = "story";
+    ensureBeat();
+    lastBeatSig = beatSig();
     renderChrome();
     renderPanel();
     fitCanvas();
@@ -79,6 +117,9 @@
     }
     if (q.get("scene") && NB.SCENES[q.get("scene")] && sess.role === "dm") {
       S.sceneId = q.get("scene");
+      S.stageMode = "story";
+      S.faceoff = null;
+      setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
     }
   }
 
@@ -89,26 +130,101 @@
     $("top-code").textContent = S.tableCode;
     $("top-role").textContent = isDM() ? "DM" : (sess.name || "player");
     $("btn-role").textContent = isDM() ? "DM" : "Player";
-    $("cap-loc").textContent = sc.name;
-    $("cap-nar").textContent = sc.narration;
     $("dm-stage-tools").classList.toggle("hidden", !isDM());
     $("btn-add-pc").classList.toggle("hidden", !isDM());
     $("party-lede").textContent = isDM() ? "Every blade at the table. Thumbs on the HP." : "Your contract. Your blood.";
-    var row = $("present-row");
+    $("story-page").classList.toggle("faceoff", isFaceoff());
+    $("faceoff-ui").classList.toggle("hidden", !isFaceoff());
+    $("cast-strip").classList.toggle("hidden", isFaceoff());
+    $("btn-faceoff").textContent = isFaceoff() ? "End face-off" : "Face-off";
+    renderCast();
+    renderCaption();
+    if (isFaceoff()) renderFaceoffUI();
+    fitCanvas();
+  }
+
+  function renderCast() {
+    var row = $("cast-strip");
     row.innerHTML = "";
-    (sc.present || []).forEach(function (id) {
+    if (isFaceoff()) return;
+    var speaker = S.beat && S.beat.speakerId;
+    (scene().present || []).forEach(function (id) {
       var n = NB.NPCS[id];
       if (!n) return;
-      var s = document.createElement("span");
-      s.className = "npc-chip";
-      s.textContent = n.name;
-      row.appendChild(s);
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "cast-card" + (speaker === id ? " on" : "");
+      b.setAttribute("data-npc", id);
+      b.setAttribute("role", "listitem");
+      b.title = "Hear " + n.name;
+      var cv = document.createElement("canvas");
+      cv.width = 52;
+      cv.height = 52;
+      cv.setAttribute("aria-hidden", "true");
+      var lab = document.createElement("span");
+      lab.textContent = n.name.split(" ")[0];
+      b.appendChild(cv);
+      b.appendChild(lab);
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        hearNpc(id);
+      });
+      row.appendChild(b);
+      NB.paintPortrait(cv, n.sprite || id);
     });
-    $("hud-overworld").classList.toggle("hidden", S.stageMode === "faceoff" || !!dialogue);
-    $("faceoff-ui").classList.toggle("hidden", S.stageMode !== "faceoff");
-    $("dialogue").classList.toggle("hidden", !dialogue);
-    if (S.stageMode === "faceoff") renderFaceoffUI();
-    if (dialogue) renderDialogueDOM();
+  }
+
+  function renderCaption() {
+    ensureBeat();
+    var sc = scene();
+    var n = S.beat.speakerId && NB.NPCS[S.beat.speakerId];
+    var loc = $("cap-loc");
+    var spk = $("cap-speaker");
+    var bust = $("cap-bust");
+    loc.textContent = sc.name;
+    if (n) {
+      spk.textContent = n.name;
+      spk.classList.remove("hidden");
+      bust.classList.remove("hidden");
+      NB.paintPortrait(bust, n.sprite || n.id);
+    } else {
+      spk.textContent = "";
+      spk.classList.add("hidden");
+      bust.classList.add("hidden");
+    }
+    var full = currentLine();
+    if (localShown > full.length) localShown = full.length;
+    $("cap-nar").textContent = full.slice(0, localShown);
+    var more = localShown < full.length || (S.beat.index | 0) < (S.beat.lines.length - 1);
+    $("cap-hint").classList.toggle("hidden", !more);
+    $("cap-hint").textContent = localShown < full.length ? "tap to finish" : "tap to continue";
+  }
+
+  function hearNpc(id) {
+    var n = NB.NPCS[id];
+    if (!n || !n.lines || !n.lines.length) return;
+    var pick = n.lines[Math.floor(Math.random() * n.lines.length)];
+    setBeat({ speakerId: id, lines: [pick], index: 0 }, true);
+    persist();
+    renderChrome();
+  }
+
+  function tapCaption() {
+    ensureBeat();
+    var full = currentLine();
+    if (localShown < full.length) {
+      localShown = full.length;
+      renderCaption();
+      return;
+    }
+    if ((S.beat.index | 0) < S.beat.lines.length - 1) {
+      S.beat.index = (S.beat.index | 0) + 1;
+      lastBeatSig = beatSig();
+      localShown = reduceMotion ? 9999 : 0;
+      typeAcc = 0;
+      persist();
+      renderCaption();
+    }
   }
 
   function setPanel(name) {
@@ -208,7 +324,7 @@
     pc.hp = Math.max(0, Math.min(pc.maxHp, (pc.hp | 0) + d));
     persist();
     renderParty();
-    if (S.stageMode === "faceoff") renderFaceoffUI();
+    if (isFaceoff()) renderFaceoffUI();
   }
 
   /* ——— People ——— */
@@ -250,62 +366,6 @@
     $("last-roll").textContent = value + " / d" + sides;
   }
 
-  /* ——— Dialogue ——— */
-  function nearestNpc() {
-    var sc = scene();
-    var best = null, bestD = 22;
-    (sc.npcs || []).forEach(function (n) {
-      var dx = n.x - S.px, dy = n.y - S.py;
-      var d = Math.sqrt(dx * dx + dy * dy);
-      if (d < bestD) { bestD = d; best = n; }
-    });
-    return best;
-  }
-
-  function startTalk(npcId) {
-    var n = NB.NPCS[npcId];
-    if (!n) return;
-    var line = n.lines[Math.floor(Math.random() * n.lines.length)];
-    dialogue = { npcId: npcId, line: 0, shown: 0, full: line };
-    typeAcc = 0;
-    $("hud-overworld").classList.add("hidden");
-    $("dialogue").classList.remove("hidden");
-    NB.drawBust(bust, n.sprite || npcId);
-    $("dlg-name").textContent = n.name;
-    $("dlg-text").textContent = "";
-  }
-
-  function lookAround() {
-    dialogue = { npcId: null, line: 0, shown: 0, full: scene().narration };
-    typeAcc = 0;
-    $("hud-overworld").classList.add("hidden");
-    $("dialogue").classList.remove("hidden");
-    NB.drawBust(bust, "player");
-    $("dlg-name").textContent = scene().name;
-    $("dlg-text").textContent = "";
-  }
-
-  function advanceDialogue() {
-    if (!dialogue) return;
-    if (dialogue.shown < dialogue.full.length) {
-      dialogue.shown = dialogue.full.length;
-      $("dlg-text").textContent = dialogue.full;
-      return;
-    }
-    closeDialogue();
-  }
-
-  function closeDialogue() {
-    dialogue = null;
-    $("dialogue").classList.add("hidden");
-    if (S.stageMode !== "faceoff") $("hud-overworld").classList.remove("hidden");
-  }
-
-  function renderDialogueDOM() {
-    if (!dialogue) return;
-    $("dlg-text").textContent = dialogue.full.slice(0, dialogue.shown);
-  }
-
   /* ——— Face-off ——— */
   function renderFaceoffUI() {
     var fo = S.faceoff || {};
@@ -317,9 +377,18 @@
     $("fo-op-name").textContent = fo.title || (opp ? opp.name : "Across the stones");
     $("fo-op-hp").style.width = (fo.kind === "combat" ? "80%" : "100%");
     $("fo-bar-op").style.visibility = fo.kind === "task" || fo.kind === "lock" || fo.kind === "toast" ? "hidden" : "visible";
-    $("fo-sub").textContent = S.lastAction || fo.sub || "The table is waiting.";
+    $("fo-sub").textContent = S.lastAction || fo.sub || "The table is looking at this.";
     var act = $("fo-cmds").querySelector("[data-cmd='act']");
     if (act) act.textContent = fo.kind === "combat" ? "Fight" : "Act";
+  }
+
+  function endFaceoff() {
+    S.stageMode = "story";
+    S.faceoff = null;
+    S.lastAction = "";
+    setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
+    persist();
+    renderChrome();
   }
 
   function faceoffCmd(cmd) {
@@ -331,88 +400,83 @@
       leave: ""
     };
     if (cmd === "leave") {
-      S.stageMode = "overworld";
-      S.faceoff = null;
-      S.lastAction = "";
-      persist();
-      renderChrome();
+      endFaceoff();
       return;
     }
     if (cmd === "act" && S.faceoff && S.faceoff.kind === "combat") cmd = "fight";
     S.lastAction = lines[cmd] || lines.act;
+    setBeat({ speakerId: null, lines: [S.lastAction], index: 0 }, true);
     persist();
+    renderCaption();
     renderFaceoffUI();
-  }
-
-  /* ——— Movement ——— */
-  function step(dt) {
-    if (dialogue || S.stageMode === "faceoff" || panel !== "stage") { walking = false; return; }
-    var vx = 0, vy = 0;
-    if (keys.left) vx -= 1;
-    if (keys.right) vx += 1;
-    if (keys.up) vy -= 1;
-    if (keys.down) vy += 1;
-    walking = vx !== 0 || vy !== 0;
-    if (!walking) return;
-    if (vx < 0) S.facing = "left";
-    else if (vx > 0) S.facing = "right";
-    else if (vy < 0) S.facing = "up";
-    else S.facing = "down";
-    var sp = 38 * (dt / 1000);
-    if (vx && vy) sp *= 0.72;
-    var nx = S.px + vx * sp;
-    var ny = S.py + vy * sp;
-    var sc = scene();
-    if (NB.walkable(sc, nx, S.py)) S.px = nx;
-    if (NB.walkable(sc, S.px, ny)) S.py = ny;
   }
 
   /* ——— Draw ——— */
   function fitCanvas() {
     if (!canvas) return;
-    canvas.width = NB.STAGE_W;
-    canvas.height = NB.STAGE_H;
+    var wrap = $("story-art");
+    if (!wrap) return;
+    var r = wrap.getBoundingClientRect();
+    viewW = Math.max(1, Math.round(r.width));
+    viewH = Math.max(1, Math.round(r.height));
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    var bw = Math.max(1, Math.round(viewW * dpr));
+    var bh = Math.max(1, Math.round(viewH * dpr));
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+    }
+    canvas.style.width = viewW + "px";
+    canvas.style.height = viewH + "px";
   }
 
   function draw() {
-    if (!ctx) return;
+    if (!ctx || panel !== "stage") return;
+    if (viewW < 8 || viewH < 8) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     var sc = scene();
-    NB.drawSceneBg(ctx, sc, S.stageMode);
-    if (S.stageMode === "faceoff") {
-      var me = myPc();
-      NB.drawActor(ctx, "player", 70, 132, { t: t, h: 72, facing: "right", label: me ? me.name : "You" });
-      var oid = (S.faceoff && S.faceoff.opponentId) || "dreth";
-      var n = NB.NPCS[oid];
-      NB.drawActor(ctx, (n && n.sprite) || oid, 176, 132, { t: t, h: 72, facing: "left", label: n ? n.name.split(" ")[0] : "" });
-      return;
-    }
-    (sc.npcs || []).forEach(function (spot) {
-      var n = NB.NPCS[spot.id];
-      if (!n) return;
-      NB.drawActor(ctx, n.sprite || spot.id, spot.x, spot.y, { t: t, h: 30, label: n.name.split(" ")[0] });
+    NB.drawSceneCover(ctx, sc, isFaceoff() ? "faceoff" : "story", viewW, viewH);
+    if (!isFaceoff()) return;
+    var me = myPc();
+    var figH = Math.max(72, Math.round(viewH * 0.48));
+    var ground = Math.round(viewH * 0.86);
+    NB.drawActor(ctx, "player", Math.round(viewW * 0.30), ground, {
+      t: t, h: figH, facing: "right", label: me ? me.name : "You"
     });
-    var followers = S.party.slice(0, 3);
-    followers.forEach(function (pc, i) {
-      if (i === 0) return;
-      var fx = S.px - (i * 10);
-      var fy = S.py + 2;
-      NB.drawActor(ctx, "player", fx, fy, { t: t, walking: walking, facing: S.facing, h: 24 });
+    var oid = (S.faceoff && S.faceoff.opponentId) || "dreth";
+    var n = NB.NPCS[oid];
+    NB.drawActor(ctx, (n && n.sprite) || oid, Math.round(viewW * 0.70), ground, {
+      t: t, h: figH, facing: "left", label: n ? n.name.split(" ")[0] : ""
     });
-    NB.drawActor(ctx, "player", S.px, S.py, { t: t, walking: walking, facing: S.facing, h: 32, label: (myPc() && myPc().name) || sess.name || "You" });
   }
 
   function loop(ts) {
     var dt = lastTs ? Math.min(48, ts - lastTs) : 16;
     lastTs = ts;
     t += 1;
-    step(dt);
-    if (dialogue && dialogue.shown < dialogue.full.length) {
-      typeAcc += dt;
-      while (typeAcc > 22 && dialogue.shown < dialogue.full.length) {
-        dialogue.shown += 1;
-        typeAcc -= 22;
+    if (S.beat) {
+      var full = currentLine();
+      if (localShown < full.length) {
+        typeAcc += dt;
+        var delay = reduceMotion ? 0 : 22;
+        if (delay === 0) {
+          localShown = full.length;
+        } else {
+          while (typeAcc > delay && localShown < full.length) {
+            localShown += 1;
+            typeAcc -= delay;
+          }
+        }
+        var el = $("cap-nar");
+        if (el) el.textContent = full.slice(0, localShown);
+        var more = localShown < full.length || (S.beat.index | 0) < (S.beat.lines.length - 1);
+        var hint = $("cap-hint");
+        if (hint) {
+          hint.classList.toggle("hidden", !more);
+          hint.textContent = localShown < full.length ? "tap to finish" : "tap to continue";
+        }
       }
-      $("dlg-text").textContent = dialogue.full.slice(0, dialogue.shown);
     }
     draw();
     requestAnimationFrame(loop);
@@ -425,8 +489,21 @@
   }
   function closeModal() { $("modal").classList.add("hidden"); }
 
+  function applyScene(id) {
+    S.sceneId = id;
+    var sc = scene();
+    S.px = sc.spawn.x;
+    S.py = sc.spawn.y;
+    S.stageMode = "story";
+    S.faceoff = null;
+    S.lastAction = "";
+    setBeat({ speakerId: null, lines: sceneBeats(sc), index: 0 }, true);
+    persist();
+    renderChrome();
+  }
+
   function openScenes() {
-    var html = "<h3>Change the room</h3><div class='choice-list'>";
+    var html = "<h3>Change the room</h3><p class='sheet-lede'>Everyone at the table sees the same page.</p><div class='choice-list'>";
     NB.SCENE_ORDER.forEach(function (id) {
       var sc = NB.SCENES[id];
       html += "<button type='button' data-scene='" + id + "'>" + escapeHtml(sc.name) + "</button>";
@@ -435,21 +512,19 @@
     openModal(html);
     $("modal-card").querySelectorAll("[data-scene]").forEach(function (b) {
       b.addEventListener("click", function () {
-        S.sceneId = b.getAttribute("data-scene");
-        var sc = scene();
-        S.px = sc.spawn.x; S.py = sc.spawn.y;
-        S.stageMode = "overworld";
-        S.faceoff = null;
-        persist();
+        applyScene(b.getAttribute("data-scene"));
         closeModal();
-        renderChrome();
       });
     });
     $("modal-card").querySelector("[data-close]").addEventListener("click", closeModal);
   }
 
   function openFaceoffPick() {
-    var html = "<h3>Face-off</h3><p class='sheet-lede'>A tense beat. Players see Speak / Look / Act / Leave.</p><div class='choice-list'>";
+    if (isFaceoff()) {
+      endFaceoff();
+      return;
+    }
+    var html = "<h3>Face-off</h3><p class='sheet-lede'>A tense beat. The table looks at the confrontation — Speak / Look / Act / Leave.</p><div class='choice-list'>";
     NB.FACEOFF_KINDS.forEach(function (k) {
       html += "<button type='button' data-kind='" + k.id + "'>" + escapeHtml(k.label) + "</button>";
     });
@@ -468,6 +543,7 @@
         S.stageMode = "faceoff";
         S.faceoff = { kind: kind, opponentId: $("fo-opp").value, title: meta.label, sub: meta.sub };
         S.lastAction = meta.sub;
+        setBeat({ speakerId: S.faceoff.opponentId, lines: [meta.sub], index: 0 }, true);
         persist();
         closeModal();
         renderChrome();
@@ -519,12 +595,8 @@
         Object.assign(np, next);
         S.party.push(np);
       } else {
-        var oldLevel = pc.level;
         Object.assign(pc, next);
         if (pc.hp > pc.maxHp) pc.hp = pc.maxHp;
-        if (pc.level !== oldLevel) {
-          /* new unclaimed coach items appear automatically */
-        }
       }
       persist();
       closeModal();
@@ -639,13 +711,11 @@
     $("btn-scenes").addEventListener("click", openScenes);
     $("btn-faceoff").addEventListener("click", openFaceoffPick);
     $("btn-add-pc").addEventListener("click", function () { openPcEditor(null); });
-    $("btn-talk").addEventListener("click", function () {
-      var n = nearestNpc();
-      if (n) startTalk(n.id);
-      else lookAround();
+    $("story-caption").addEventListener("click", tapCaption);
+    $("story-art").addEventListener("click", function (ev) {
+      if (ev.target.closest(".cast-card")) return;
+      tapCaption();
     });
-    $("btn-look-ow").addEventListener("click", lookAround);
-    $("dialogue").addEventListener("click", advanceDialogue);
     $("fo-cmds").addEventListener("click", function (ev) {
       var b = ev.target.closest("[data-cmd]");
       if (b) faceoffCmd(b.getAttribute("data-cmd"));
@@ -654,42 +724,32 @@
       if (ev.target.id === "modal") closeModal();
     });
 
-    var dpad = $("dpad");
-    function hold(dir, on) { keys[dir] = on; }
-    dpad.querySelectorAll("[data-dir]").forEach(function (b) {
-      var dir = b.getAttribute("data-dir");
-      b.addEventListener("pointerdown", function (e) { e.preventDefault(); hold(dir, true); b.classList.add("on"); b.setPointerCapture(e.pointerId); });
-      b.addEventListener("pointerup", function () { hold(dir, false); b.classList.remove("on"); });
-      b.addEventListener("pointercancel", function () { hold(dir, false); b.classList.remove("on"); });
-    });
     window.addEventListener("keydown", function (e) {
-      var m = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", w: "up", s: "down", a: "left", d: "right" };
-      if (m[e.key]) { keys[m[e.key]] = true; e.preventDefault(); }
       if (e.key === "Enter" || e.key === " ") {
-        if (dialogue) advanceDialogue();
-        else if (S.stageMode !== "faceoff") {
-          var n = nearestNpc();
-          if (n) startTalk(n.id);
+        if (panel === "stage") {
+          tapCaption();
+          e.preventDefault();
         }
       }
-      if (e.key === "Escape" && dialogue) closeDialogue();
-    });
-    window.addEventListener("keyup", function (e) {
-      var m = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", w: "up", s: "down", a: "left", d: "right" };
-      if (m[e.key]) keys[m[e.key]] = false;
+      if (e.key === "Escape" && !$("modal").classList.contains("hidden")) closeModal();
     });
     window.addEventListener("resize", fitCanvas);
   }
 
   NB.onRemoteState(function (next) {
     S = next;
+    if (S.stageMode === "overworld") S.stageMode = "story";
+    if (beatSig() !== lastBeatSig) {
+      localShown = reduceMotion ? 9999 : 0;
+      typeAcc = 0;
+      lastBeatSig = beatSig();
+    }
     renderChrome();
     renderPanel();
   });
 
   canvas = $("stage");
   ctx = canvas.getContext("2d");
-  bust = $("bust");
   bind();
   parseQuery();
   NB.loadArt().then(function () {
