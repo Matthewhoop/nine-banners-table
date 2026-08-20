@@ -482,6 +482,9 @@ textarea { min-height: 88px; resize: vertical; }
 }
 .dec-badge.solo { border-color: var(--ember); color: #e8b090; background: #2a1810; }
 .dec-badge.group { border-color: var(--teal-bright); color: #b8d8d0; background: #14241e; }
+.dec-badge.talk { border-color: var(--brass); color: var(--brass); background: #2a2014; }
+.story-page.can-continue .cap-hint { color: var(--brass); }
+.dec-advance .btn.brass { min-height: 52px; }
 .dec-prompt {
   margin: 0;
   font-family: var(--font);
