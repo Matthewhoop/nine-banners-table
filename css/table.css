@@ -443,12 +443,27 @@ textarea { min-height: 88px; resize: vertical; }
 .decision-card {
   flex: 0 0 auto;
   max-height: 44dvh;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, #1a1410, #120e0a);
   border-top: 1px solid var(--line);
-  padding: 12px 12px 12px;
+  padding: 12px 12px 10px;
 }
+.dec-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.dec-advance {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  background: #120e0a;
+}
+.dec-advance .dec-actions { margin: 0; }
 .dec-head {
   display: flex; align-items: flex-start; gap: 10px;
   margin: 0 0 10px;
