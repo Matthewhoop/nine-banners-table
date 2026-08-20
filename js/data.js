@@ -171,6 +171,16 @@
         "Stew and barge-talk. Mara behind the bar.",
         "Your badges are new. The first toast is tomorrow night."
       ],
+      decisions: [
+        {
+          id: "inn-settle",
+          kind: "group",
+          afterBeat: 1,
+          prompt: "The room is filling. Where does the table settle?",
+          choices: ["Sit at the bar", "Take the back table", "Stay on your feet"],
+          allowText: true
+        }
+      ],
       present: ["mara", "aldren", "lir"],
       spawn: { x: 118, y: 108 },
       npcs: [
@@ -199,6 +209,17 @@
         "The river is high and brown. Banners going up. Dawn on the fork.",
         "Sera briefs her blades before the hall opens."
       ],
+      decisions: [
+        {
+          id: "quay-overhear",
+          kind: "solo",
+          afterBeat: 1,
+          prompt: "Two barge-hands are arguing over a crate. Who leans in?",
+          choices: ["Listen", "Walk past"],
+          allowText: true,
+          reacts: ["I watch the door", "I create a distraction"]
+        }
+      ],
       present: ["sera", "durne", "brann"],
       spawn: { x: 120, y: 100 },
       npcs: [
@@ -225,6 +246,16 @@
       beats: [
         "Day 1. Petitions. Each house reads what they want the treaty to say.",
         "The hall is open. The quay is louder."
+      ],
+      decisions: [
+        {
+          id: "hall-banner",
+          kind: "group",
+          afterBeat: 1,
+          prompt: "The houses are taking their places. Which banner do we stand near?",
+          choices: ["House Vell", "House Dreth", "House Calren", "The host-lord"],
+          allowText: true
+        }
       ],
       present: ["pava", "sera", "lir", "kell", "tolla", "ise", "dreth", "ysolde", "corin"],
       spawn: { x: 120, y: 118 },

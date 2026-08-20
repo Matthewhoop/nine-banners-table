@@ -20,7 +20,9 @@
       lastRoll: null,
       lastAction: "",
       beat: null,
-      joined: []
+      joined: [],
+      decision: null,
+      resolvedDecisions: []
     };
   }
 

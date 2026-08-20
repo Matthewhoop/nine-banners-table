@@ -7,6 +7,7 @@
   var localShown = 0;
   var typeAcc = 0;
   var lastBeatSig = "";
+  var decDraft = { id: "", text: "", choice: "" };
   var canvas, ctx;
   var lastTs = 0;
   var viewW = 240, viewH = 160, dpr = 1;
@@ -65,6 +66,368 @@
     return lines[i] || "";
   }
 
+  function myKey() {
+    return String(sess.name || (isDM() ? "DM" : "guest")).trim().toLowerCase();
+  }
+  function displayName() {
+    return (sess.name || (isDM() ? "DM" : "A blade")).trim();
+  }
+  function decisionOpen() {
+    return !!(S.decision && S.decision.status === "open") && !isFaceoff();
+  }
+  function makeLiveDecision(spec, called) {
+    spec = spec || {};
+    var kind = spec.kind === "solo" ? "solo" : "group";
+    var choices = (spec.choices || []).map(function (c) { return String(c).trim(); }).filter(Boolean).slice(0, 4);
+    var reacts = kind === "solo"
+      ? (spec.reacts || []).map(function (c) { return String(c).trim(); }).filter(Boolean).slice(0, 4)
+      : [];
+    return {
+      id: spec.id || ("call-" + Date.now().toString(36)),
+      kind: kind,
+      prompt: String(spec.prompt || "What do you do?").trim() || "What do you do?",
+      choices: choices,
+      allowText: spec.allowText !== false,
+      reacts: reacts,
+      actorId: spec.actorId || null,
+      actorName: spec.actorName || null,
+      submissions: {},
+      status: "open",
+      called: !!called,
+      sceneId: S.sceneId
+    };
+  }
+  function authoredLines(sc) {
+    return sceneBeats(sc || scene());
+  }
+  function isSceneNarrationBeat() {
+    if (!S.beat || S.beat.speakerId) return false;
+    var authored = authoredLines();
+    var lines = S.beat.lines || [];
+    return authored.every(function (ln, i) { return lines[i] === ln; });
+  }
+  function sceneDecisionForBeat() {
+    var sc = scene();
+    var decs = (sc && sc.decisions) || [];
+    if (!decs.length || !isSceneNarrationBeat()) return null;
+    var idx = (S.beat && S.beat.index) | 0;
+    var last = authoredLines(sc).length - 1;
+    for (var i = 0; i < decs.length; i++) {
+      var at = decs[i].afterBeat != null ? decs[i].afterBeat : last;
+      if (at === idx) return decs[i];
+    }
+    return null;
+  }
+  function syncSceneDecision() {
+    if (isFaceoff()) return false;
+    if (S.decision && S.decision.status === "open") return false;
+    var d = sceneDecisionForBeat();
+    if (!d) return false;
+    if ((S.resolvedDecisions || []).indexOf(d.id) >= 0) return false;
+    S.decision = makeLiveDecision(d, false);
+    persist();
+    return true;
+  }
+  function mineSubmission() {
+    var d = S.decision;
+    if (!d || !d.submissions) return null;
+    return d.submissions[myKey()] || null;
+  }
+  function isActor() {
+    var d = S.decision;
+    if (!d || d.kind !== "solo" || !d.actorName) return false;
+    if (d.actorName.toLowerCase() === displayName().toLowerCase()) return true;
+    var me = myPc();
+    return !!(me && d.actorId && me.id === d.actorId);
+  }
+  function actorSubmitted() {
+    var d = S.decision;
+    if (!d || !d.submissions) return false;
+    return Object.keys(d.submissions).some(function (k) {
+      return d.submissions[k] && d.submissions[k].role === "act";
+    });
+  }
+  function submissionList(d) {
+    d = d || S.decision;
+    if (!d || !d.submissions) return [];
+    return Object.keys(d.submissions).map(function (k) { return d.submissions[k]; })
+      .filter(Boolean)
+      .sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+  }
+  function claimActor(name, pcId) {
+    var d = S.decision;
+    if (!d || d.kind !== "solo" || d.actorName) return;
+    name = String(name || "").trim();
+    if (!name) return;
+    d.actorName = name;
+    d.actorId = pcId || null;
+    persist();
+    renderDecision();
+    renderChromeLight();
+    var ta = $("dec-text");
+    if (ta && isActor()) ta.focus();
+  }
+  function upsertSubmission(role, choice, text) {
+    var d = S.decision;
+    if (!d) return;
+    var key = myKey();
+    var prev = (d.submissions || {})[key] || {};
+    d.submissions = d.submissions || {};
+    d.submissions[key] = {
+      who: displayName(),
+      pcId: (myPc() && myPc().id) || prev.pcId || null,
+      role: role,
+      choice: choice || prev.choice || null,
+      text: text != null ? String(text).trim() : (prev.text || ""),
+      at: Date.now()
+    };
+    persist();
+    renderDecision();
+  }
+  function decisionSummary(d) {
+    d = d || S.decision;
+    if (!d) return "";
+    var list = submissionList(d);
+    if (!list.length) return "The table lets the moment pass.";
+    if (d.kind === "solo") {
+      var act = null, reacts = [];
+      list.forEach(function (s) {
+        if (s.role === "act" && !act) act = s;
+        else reacts.push(s);
+      });
+      var parts = [];
+      if (act) {
+        var bit = act.who;
+        if (act.choice) bit += " — " + act.choice;
+        if (act.text) bit += (act.choice ? ". " : " — ") + act.text;
+        if (!act.choice && !act.text) bit += " acts.";
+        parts.push(bit);
+      }
+      reacts.forEach(function (r) {
+        var rb = r.who;
+        if (r.choice) rb += ": " + r.choice;
+        if (r.text) rb += (r.choice ? " — " : ": ") + r.text;
+        parts.push(rb);
+      });
+      return parts.join(" ");
+    }
+    return list.map(function (s) {
+      var bit = s.who;
+      if (s.choice) bit += " — " + s.choice;
+      if (s.text) bit += (s.choice ? ". " : " — ") + s.text;
+      return bit;
+    }).join(" · ");
+  }
+  function canPlayerContinue() {
+    if (!decisionOpen()) return false;
+    if (isDM()) return true;
+    if (S.decision.kind === "solo") return actorSubmitted();
+    return submissionList().length > 0;
+  }
+  function resolveDecision(skipped) {
+    var d = S.decision;
+    if (!d) return;
+    var summary = skipped && !submissionList(d).length ? "" : decisionSummary(d);
+    S.resolvedDecisions = S.resolvedDecisions || [];
+    if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
+    S.decision = null;
+    if (summary) S.lastAction = summary;
+    ensureBeat();
+    var last = (S.beat.lines || []).length - 1;
+    var idx = S.beat.index | 0;
+    if (idx < last) {
+      S.beat.index = idx + 1;
+      lastBeatSig = beatSig();
+      localShown = reduceMotion ? 9999 : 0;
+      typeAcc = 0;
+    } else if (summary) {
+      S.beat.lines = (S.beat.lines || []).concat([summary]);
+      S.beat.index = S.beat.lines.length - 1;
+      lastBeatSig = beatSig();
+      localShown = reduceMotion ? 9999 : 0;
+      typeAcc = 0;
+    }
+    persist();
+    renderChrome();
+  }
+  function renderChromeLight() {
+    $("story-page").classList.toggle("has-decision", decisionOpen());
+  }
+  function tallyHtml(d) {
+    var list = submissionList(d);
+    if (!list.length) return "";
+    var counts = {};
+    list.forEach(function (s) {
+      if (s.choice) counts[s.choice] = (counts[s.choice] || 0) + 1;
+    });
+    var countBits = Object.keys(counts).map(function (k) { return escapeHtml(k) + " · " + counts[k]; });
+    var rows = list.map(function (s) {
+      var said = [];
+      if (s.choice) said.push(s.choice);
+      if (s.text) said.push(s.text);
+      return "<div class='dec-row'><div class='dec-who'>" + escapeHtml(s.who) +
+        (s.role === "react" ? " <span class='dec-said'>reacts</span>" : "") +
+        (s.role === "act" ? " <span class='dec-said'>acts</span>" : "") +
+        "</div><div class='dec-said'>" + escapeHtml(said.join(" — ") || "…") + "</div></div>";
+    }).join("");
+    return "<div class='dec-tally'><h4>The blades said</h4>" +
+      (countBits.length ? "<p class='dec-counts'>" + countBits.join(" · ") + "</p>" : "") +
+      rows + "</div>";
+  }
+  function bindDecisionCard(el, d) {
+    el.querySelectorAll("[data-claim]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var me = myPc();
+        claimActor(displayName(), me ? me.id : null);
+      });
+    });
+    var pick = el.querySelector("#dec-actor-pick");
+    var nameBtn = el.querySelector("#dec-name-actor");
+    if (nameBtn && pick) {
+      nameBtn.addEventListener("click", function () {
+        var opt = pick.options[pick.selectedIndex];
+        if (!opt || !opt.value) return;
+        claimActor(opt.textContent, opt.value.indexOf("pc-") === 0 ? opt.value : null);
+      });
+    }
+    el.querySelectorAll("[data-choice]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        decDraft.choice = b.getAttribute("data-choice");
+        var role = d.kind === "solo" ? (isActor() ? "act" : "react") : "vote";
+        if (d.kind === "solo" && !isActor() && !d.actorName) return;
+        upsertSubmission(role, decDraft.choice, decDraft.text);
+      });
+    });
+    var ta = el.querySelector("#dec-text");
+    if (ta) {
+      ta.addEventListener("input", function () { decDraft.text = ta.value; });
+    }
+    var send = el.querySelector("#dec-send");
+    if (send) {
+      send.addEventListener("click", function () {
+        var role = d.kind === "solo" ? (isActor() ? "act" : "react") : "vote";
+        var text = ta ? ta.value : decDraft.text;
+        if (!decDraft.choice && !(text || "").trim()) {
+          if (ta) ta.focus();
+          return;
+        }
+        upsertSubmission(role, decDraft.choice, text);
+      });
+    }
+    var cont = el.querySelector("#dec-continue");
+    if (cont) cont.addEventListener("click", function () { resolveDecision(false); });
+    var skip = el.querySelector("#dec-skip");
+    if (skip) skip.addEventListener("click", function () { resolveDecision(true); });
+  }
+  function renderDecision() {
+    var el = $("decision-card");
+    if (!el) return;
+    var d = S.decision;
+    if (!d || d.status !== "open" || isFaceoff()) {
+      el.classList.add("hidden");
+      el.innerHTML = "";
+      $("story-page").classList.remove("has-decision");
+      return;
+    }
+    $("story-page").classList.add("has-decision");
+    if (decDraft.id !== d.id) {
+      var mine = mineSubmission();
+      decDraft = { id: d.id, text: mine ? (mine.text || "") : "", choice: mine ? (mine.choice || "") : "" };
+    } else {
+      var live = mineSubmission();
+      if (live && !decDraft.choice && live.choice) decDraft.choice = live.choice;
+    }
+    var focusId = document.activeElement && document.activeElement.id;
+    var selStart = null, selEnd = null;
+    if (focusId === "dec-text" && $("dec-text")) {
+      selStart = $("dec-text").selectionStart;
+      selEnd = $("dec-text").selectionEnd;
+    }
+    var html = "";
+    var badge = d.kind === "solo" ? "One blade" : "The table";
+    html += "<div class='dec-head'><span class='dec-badge " + d.kind + "'>" + badge + "</span>";
+    html += "<p class='dec-prompt'>" + escapeHtml(d.prompt) + "</p></div>";
+
+    var iAmActor = isActor();
+    var hasActor = !!(d.actorName);
+    var mine = mineSubmission();
+
+    if (d.kind === "solo" && !hasActor) {
+      html += "<p class='dec-status'>One blade takes this. The others can react after.</p>";
+      html += "<div class='dec-actions'><button type='button' class='btn brass' data-claim>I do this</button></div>";
+      if (isDM() && S.party.length) {
+        html += "<div class='dec-pick'><select id='dec-actor-pick'><option value=''>Or name a blade…</option>";
+        S.party.forEach(function (pc) {
+          html += "<option value='" + escapeAttr(pc.id) + "'>" + escapeHtml(pc.name) + "</option>";
+        });
+        html += "</select><button type='button' class='btn slim' id='dec-name-actor'>Name them</button></div>";
+      } else if (isDM()) {
+        html += "<p class='dec-status'>No blades on the roster yet — a player can tap I do this, or add a blade on Party.</p>";
+      }
+    } else if (d.kind === "solo" && hasActor && iAmActor) {
+      html += "<p class='dec-status'>You are acting" + (mine && (mine.choice || mine.text) ? " · sent" : "") + ".</p>";
+      if (d.choices && d.choices.length) {
+        html += "<div class='dec-choices'>";
+        d.choices.forEach(function (c) {
+          html += "<button type='button' data-choice='" + escapeAttr(c) + "' class='" + (decDraft.choice === c ? "on" : "") + "'>" + escapeHtml(c) + "</button>";
+        });
+        html += "</div>";
+      }
+      if (d.allowText !== false) {
+        html += "<div class='dec-field'><label for='dec-text'>What do you do?</label>";
+        html += "<textarea id='dec-text' maxlength='280' placeholder='Type it.'>" + escapeHtml(decDraft.text) + "</textarea></div>";
+      }
+      html += "<div class='dec-actions'><button type='button' class='btn brass' id='dec-send'>Send</button></div>";
+    } else if (d.kind === "solo" && hasActor && !iAmActor) {
+      html += "<p class='dec-status'>" + escapeHtml(d.actorName) + " is acting…</p>";
+      if (d.reacts && d.reacts.length) {
+        html += "<p class='dec-label'>React</p><div class='dec-reacts'>";
+        d.reacts.forEach(function (c) {
+          html += "<button type='button' data-choice='" + escapeAttr(c) + "' class='" + (decDraft.choice === c ? "on" : "") + "'>" + escapeHtml(c) + "</button>";
+        });
+        html += "</div>";
+      }
+      html += "<div class='dec-field'><label for='dec-text'>Or type it</label>";
+      html += "<textarea id='dec-text' maxlength='200' placeholder='I watch the door…'>" + escapeHtml(decDraft.text) + "</textarea></div>";
+      html += "<div class='dec-actions'><button type='button' class='btn ink' id='dec-send'>Send react</button></div>";
+    } else {
+      html += "<p class='dec-status'>Everyone at the table. Pick, type, or both.</p>";
+      if (d.choices && d.choices.length) {
+        html += "<div class='dec-choices'>";
+        d.choices.forEach(function (c) {
+          html += "<button type='button' data-choice='" + escapeAttr(c) + "' class='" + (decDraft.choice === c ? "on" : "") + "'>" + escapeHtml(c) + "</button>";
+        });
+        html += "</div>";
+      }
+      if (d.allowText !== false) {
+        html += "<div class='dec-field'><label for='dec-text'>What do you do?</label>";
+        html += "<textarea id='dec-text' maxlength='280' placeholder='Type it.'>" + escapeHtml(decDraft.text) + "</textarea></div>";
+      }
+      html += "<div class='dec-actions'><button type='button' class='btn brass' id='dec-send'>Send</button></div>";
+    }
+
+    html += tallyHtml(d);
+
+    if (isDM() || canPlayerContinue()) {
+      html += "<div class='dec-actions'>";
+      html += "<button type='button' class='btn brass' id='dec-continue'>Continue</button>";
+      if (isDM()) html += "<button type='button' class='btn slim' id='dec-skip'>Skip</button>";
+      html += "</div>";
+    } else if (d.kind === "solo" && hasActor && !actorSubmitted()) {
+      html += "<p class='dec-status'>Waiting on " + escapeHtml(d.actorName) + ".</p>";
+    }
+
+    el.innerHTML = html;
+    el.classList.remove("hidden");
+    bindDecisionCard(el, d);
+    if (focusId && $(focusId)) {
+      $(focusId).focus();
+      if (focusId === "dec-text" && selStart != null) {
+        try { $("dec-text").setSelectionRange(selStart, selEnd); } catch (e) {}
+      }
+    }
+  }
+
   /* ——— Join ——— */
   function paintJoinBanners() {
     var el = $("join-banners");
@@ -119,6 +482,7 @@
       S.sceneId = q.get("scene");
       S.stageMode = "story";
       S.faceoff = null;
+      S.decision = null;
       setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
     }
   }
@@ -137,8 +501,10 @@
     $("faceoff-ui").classList.toggle("hidden", !isFaceoff());
     $("cast-strip").classList.toggle("hidden", isFaceoff());
     $("btn-faceoff").textContent = isFaceoff() ? "End face-off" : "Face-off";
+    syncSceneDecision();
     renderCast();
     renderCaption();
+    renderDecision();
     if (isFaceoff()) renderFaceoffUI();
     fitCanvas();
   }
@@ -196,8 +562,13 @@
     if (localShown > full.length) localShown = full.length;
     $("cap-nar").textContent = full.slice(0, localShown);
     var more = localShown < full.length || (S.beat.index | 0) < (S.beat.lines.length - 1);
-    $("cap-hint").classList.toggle("hidden", !more);
-    $("cap-hint").textContent = localShown < full.length ? "tap to finish" : "tap to continue";
+    if (decisionOpen() && localShown >= full.length) {
+      $("cap-hint").classList.remove("hidden");
+      $("cap-hint").textContent = "a decision waits";
+    } else {
+      $("cap-hint").classList.toggle("hidden", !more);
+      $("cap-hint").textContent = localShown < full.length ? "tap to finish" : "tap to continue";
+    }
   }
 
   function hearNpc(id) {
@@ -217,6 +588,7 @@
       renderCaption();
       return;
     }
+    if (decisionOpen()) return;
     if ((S.beat.index | 0) < S.beat.lines.length - 1) {
       S.beat.index = (S.beat.index | 0) + 1;
       lastBeatSig = beatSig();
@@ -224,6 +596,8 @@
       typeAcc = 0;
       persist();
       renderCaption();
+      syncSceneDecision();
+      renderDecision();
     }
   }
 
@@ -473,8 +847,13 @@
         var more = localShown < full.length || (S.beat.index | 0) < (S.beat.lines.length - 1);
         var hint = $("cap-hint");
         if (hint) {
-          hint.classList.toggle("hidden", !more);
-          hint.textContent = localShown < full.length ? "tap to finish" : "tap to continue";
+          if (decisionOpen() && localShown >= full.length) {
+            hint.classList.remove("hidden");
+            hint.textContent = "a decision waits";
+          } else {
+            hint.classList.toggle("hidden", !more);
+            hint.textContent = localShown < full.length ? "tap to finish" : "tap to continue";
+          }
         }
       }
     }
@@ -497,6 +876,11 @@
     S.stageMode = "story";
     S.faceoff = null;
     S.lastAction = "";
+    S.decision = null;
+    var scDecIds = (sc.decisions || []).map(function (d) { return d.id; });
+    S.resolvedDecisions = (S.resolvedDecisions || []).filter(function (rid) {
+      return scDecIds.indexOf(rid) < 0;
+    });
     setBeat({ speakerId: null, lines: sceneBeats(sc), index: 0 }, true);
     persist();
     renderChrome();
@@ -541,6 +925,7 @@
         var kind = b.getAttribute("data-kind");
         var meta = NB.FACEOFF_KINDS.find(function (k) { return k.id === kind; });
         S.stageMode = "faceoff";
+        S.decision = null;
         S.faceoff = { kind: kind, opponentId: $("fo-opp").value, title: meta.label, sub: meta.sub };
         S.lastAction = meta.sub;
         setBeat({ speakerId: S.faceoff.opponentId, lines: [meta.sub], index: 0 }, true);
@@ -550,6 +935,62 @@
       });
     });
     $("modal-card").querySelector("[data-close]").addEventListener("click", closeModal);
+  }
+
+  function openCallDecision() {
+    if (!isDM()) return;
+    var html = "<h3>Call a decision</h3>";
+    html += "<p class='sheet-lede'>Spin a solo or table prompt right now. Phones follow.</p>";
+    html += "<div class='kind-toggle'>";
+    html += "<button type='button' class='on' data-kind='solo'>One blade</button>";
+    html += "<button type='button' data-kind='group'>The table</button>";
+    html += "</div>";
+    html += "<div class='form-grid'>";
+    html += "<label>Prompt<textarea id='call-prompt' maxlength='220' placeholder='The clerk’s case is unattended. Who reaches for it?'></textarea></label>";
+    html += "<label>Choices (optional, one per line, up to 4)<textarea id='call-choices' placeholder='Palm it / Leave it / Ask first'></textarea></label>";
+    html += "<label class='check-row'><input type='checkbox' id='call-text' checked> Allow a typed answer</label>";
+    html += "<label id='call-reacts-wrap'>Reacts for the others (optional, one per line)<textarea id='call-reacts' placeholder='I watch the door / I create a distraction'></textarea></label>";
+    html += "</div>";
+    html += "<div class='modal-actions'><button type='button' class='btn brass' id='call-go'>Call it</button>";
+    html += "<button type='button' class='btn ink' data-close>Back</button></div>";
+    openModal(html);
+    var kind = "solo";
+    var card = $("modal-card");
+    function paintKind() {
+      card.querySelectorAll("[data-kind]").forEach(function (b) {
+        b.classList.toggle("on", b.getAttribute("data-kind") === kind);
+      });
+      var wrap = $("call-reacts-wrap");
+      if (wrap) wrap.style.display = kind === "solo" ? "" : "none";
+    }
+    card.querySelectorAll("[data-kind]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        kind = b.getAttribute("data-kind");
+        paintKind();
+      });
+    });
+    paintKind();
+    $("call-go").addEventListener("click", function () {
+      var prompt = ($("call-prompt").value || "").trim();
+      if (!prompt) { $("call-prompt").focus(); return; }
+      var choices = ($("call-choices").value || "").split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 4);
+      var reacts = ($("call-reacts") && $("call-reacts").value || "").split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 4);
+      if (S.decision && S.decision.id) {
+        S.resolvedDecisions = S.resolvedDecisions || [];
+        if (S.resolvedDecisions.indexOf(S.decision.id) < 0) S.resolvedDecisions.push(S.decision.id);
+      }
+      S.decision = makeLiveDecision({
+        kind: kind,
+        prompt: prompt,
+        choices: choices,
+        allowText: $("call-text").checked,
+        reacts: kind === "solo" ? reacts : []
+      }, true);
+      persist();
+      closeModal();
+      renderChrome();
+    });
+    card.querySelector("[data-close]").addEventListener("click", closeModal);
   }
 
   function openPcEditor(id) {
@@ -710,6 +1151,7 @@
     $("btn-role").addEventListener("click", openRole);
     $("btn-scenes").addEventListener("click", openScenes);
     $("btn-faceoff").addEventListener("click", openFaceoffPick);
+    $("btn-call-dec").addEventListener("click", openCallDecision);
     $("btn-add-pc").addEventListener("click", function () { openPcEditor(null); });
     $("story-caption").addEventListener("click", tapCaption);
     $("story-art").addEventListener("click", function (ev) {
@@ -725,6 +1167,8 @@
     });
 
     window.addEventListener("keydown", function (e) {
+      var tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (e.key === "Enter" || e.key === " ") {
         if (panel === "stage") {
           tapCaption();
