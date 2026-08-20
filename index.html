@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0c1210">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Nine Banners · The Table</title>
+  <link rel="stylesheet" href="css/table.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect fill='%230c1210' width='16' height='16'/%3E%3Crect fill='%23c9a15b' x='2' y='3' width='2' height='8'/%3E%3Crect fill='%232a6b6b' x='5' y='3' width='2' height='8'/%3E%3Crect fill='%238b3a2a' x='8' y='3' width='2' height='8'/%3E%3Crect fill='%23d4b46a' x='11' y='3' width='2' height='8'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div id="app">
+
+    <section id="view-join" class="view">
+      <div class="join-sky" aria-hidden="true"></div>
+      <div class="join-banners" aria-hidden="true" id="join-banners"></div>
+      <div class="join-card">
+        <p class="eyebrow">Pellane · three days · a river truce</p>
+        <h1>The Accord of<br>Nine Banners</h1>
+        <p class="join-lede">A table the whole group opens on their phones. You are envoy Sera Vell’s blades. Keep her alive. Keep her seal off other people’s wax. Smile through three days of toasts.</p>
+        <div class="join-actions">
+          <button type="button" class="btn brass" id="btn-open-dm">Open as DM</button>
+          <button type="button" class="btn ink" id="btn-show-player">Join as player</button>
+        </div>
+        <form id="form-dm" class="join-form hidden" autocomplete="off">
+          <label>Table PIN
+            <input id="input-pin" type="text" inputmode="text" maxlength="16" value="9BANNERS" autocapitalize="characters">
+          </label>
+          <button type="submit" class="btn brass">Set the table</button>
+        </form>
+        <form id="form-player" class="join-form hidden" autocomplete="off">
+          <label>Your name at the table
+            <input id="input-name" type="text" maxlength="24" placeholder="e.g. Kade" autocapitalize="words">
+          </label>
+          <button type="submit" class="btn ink">Sit down</button>
+        </form>
+        <p class="join-foot">Table code <strong id="join-code">9B-PELLANE</strong> · same site, same story. Hosting comes next.</p>
+      </div>
+    </section>
+
+    <section id="view-table" class="view hidden">
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="sigil" aria-hidden="true"></span>
+          <div>
+            <p class="top-title" id="top-scene">Low Quay</p>
+            <p class="top-sub"><span id="top-code">9B-PELLANE</span> · <span id="top-role">player</span></p>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button type="button" class="chip" id="btn-role" title="Switch role">Role</button>
+        </div>
+      </header>
+
+      <div id="panel-stage" class="panel">
+        <div class="stage-frame">
+          <div class="stage-wrap" id="stage-wrap">
+            <canvas id="stage" width="240" height="160" aria-label="Pellane stage"></canvas>
+            <div class="stage-caption">
+              <p class="cap-loc" id="cap-loc">The Low Quay</p>
+              <p class="cap-nar" id="cap-nar"></p>
+            </div>
+            <div class="present-row" id="present-row"></div>
+          </div>
+        </div>
+
+        <div id="dialogue" class="dialogue hidden" role="dialog" aria-live="polite">
+          <canvas id="bust" width="48" height="48" aria-hidden="true"></canvas>
+          <div class="dlg-body">
+            <p class="dlg-name" id="dlg-name"></p>
+            <p class="dlg-text" id="dlg-text"></p>
+            <p class="dlg-hint">tap to continue</p>
+          </div>
+        </div>
+
+        <div id="faceoff-ui" class="faceoff-ui hidden">
+          <div class="fo-bars">
+            <div class="fo-bar" id="fo-bar-pc">
+              <span id="fo-pc-name">You</span>
+              <div class="hp-track"><i id="fo-pc-hp"></i></div>
+            </div>
+            <div class="fo-bar right" id="fo-bar-op">
+              <span id="fo-op-name">Across</span>
+              <div class="hp-track"><i id="fo-op-hp"></i></div>
+            </div>
+          </div>
+          <p class="fo-sub" id="fo-sub"></p>
+          <div class="fo-cmds" id="fo-cmds">
+            <button type="button" data-cmd="speak">Speak</button>
+            <button type="button" data-cmd="look">Look</button>
+            <button type="button" data-cmd="act">Act</button>
+            <button type="button" data-cmd="leave">Leave</button>
+          </div>
+        </div>
+
+        <div id="hud-overworld" class="hud">
+          <div class="dpad" id="dpad">
+            <button type="button" data-dir="up" aria-label="Up">▲</button>
+            <button type="button" data-dir="left" aria-label="Left">◀</button>
+            <button type="button" data-dir="right" aria-label="Right">▶</button>
+            <button type="button" data-dir="down" aria-label="Down">▼</button>
+          </div>
+          <div class="abtn-col">
+            <button type="button" class="abtn" id="btn-talk">Talk</button>
+            <button type="button" class="abtn dim" id="btn-look-ow">Look</button>
+          </div>
+        </div>
+
+        <div id="dm-stage-tools" class="dm-tools hidden">
+          <button type="button" class="btn slim" id="btn-scenes">Change scene</button>
+          <button type="button" class="btn slim" id="btn-faceoff">Face-off</button>
+        </div>
+      </div>
+
+      <div id="panel-party" class="panel hidden sheet">
+        <h2>The blades</h2>
+        <p class="sheet-lede" id="party-lede">Your contract. Your blood.</p>
+        <div id="coach-mount"></div>
+        <div id="party-list"></div>
+        <button type="button" class="btn brass hidden" id="btn-add-pc">Add a blade</button>
+      </div>
+
+      <div id="panel-people" class="panel hidden sheet">
+        <h2>Faces in Pellane</h2>
+        <p class="sheet-lede">What the city will tell you. Tap a name.</p>
+        <div id="npc-list"></div>
+      </div>
+
+      <div id="panel-dice" class="panel hidden sheet">
+        <h2>The cup</h2>
+        <p class="sheet-lede">Thumb the die. The table sees the last roll.</p>
+        <div class="last-roll" id="last-roll">—</div>
+        <div class="dice-grid" id="dice-grid"></div>
+      </div>
+
+      <nav class="dock" aria-label="Table">
+        <button type="button" class="dock-btn on" data-panel="stage">Stage</button>
+        <button type="button" class="dock-btn" data-panel="party">Party</button>
+        <button type="button" class="dock-btn" data-panel="people">People</button>
+        <button type="button" class="dock-btn" data-panel="dice">Dice</button>
+      </nav>
+    </section>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card" id="modal-card"></div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/coach.js"></script>
+  <script src="js/pix.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
