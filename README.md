@@ -26,11 +26,12 @@ Hosting (a public URL the whole table shares) comes next.
 - Role chip toggles DM ↔ player (PIN required to become DM).
 - Query params: `?dm=1`, `?name=Kade`.
 
-State lives in `localStorage` under `nb-table-state`. Same-browser tabs sync with `BroadcastChannel`. Different phones do not share state until this is hosted with a real sync later.
+State lives in `localStorage` under `nb-table-state` (including the open decision and who submitted). Same-browser tabs sync with `BroadcastChannel`. Different phones do not share state until this is hosted with a real sync later.
 
 ## What you get
 
 - **Stage** — a living storybook page. Full-bleed pixel scene art, a cast strip of who is present, and a caption for the current beat (typewriter; tap to continue). Tap a portrait to hear that person. Nobody steers an avatar.
+- **Decisions** — D&D-style input under the caption. Choice buttons and/or a “What do you do?” box. **One blade** (solo): one player claims the act; others can react. **The table** (group): everyone picks and/or types; the card shows a tally. DM taps **Continue** to advance the story (and can always force-advance or skip). **Call a decision** lets the DM spin a solo or group prompt mid-session without hardcoding the beat. Sample beats (player-safe, after the last caption line): Low Quay group — sit at the bar / back table / stay on your feet; Pellane Quay solo — overhear a barge argument (listen / walk past / type it; others react); Granary-Hall group — which banner to stand near.
 - **Face-off** (DM) — a tense beat the table looks at together: two figures, bars, Speak · Look · Act (or Fight) · Leave. Start or end from the DM tools.
 - **Party** — HP thumbs, AC, skills, conditions. Coach lists what that class+level should have claimed (2014 PHB): HP, proficiency, subclass timing, ASI/feat, Extra Attack, slot jumps.
 - **People** — player-safe dossiers. No campaign twists.
