@@ -439,5 +439,48 @@
     "Just passing through."
   ];
 
+  NB.TALK_END_REPLIES = [
+    "That's enough",
+    "I'll look around",
+    "I'll leave it"
+  ];
+
+  /* Generic, player-safe. No identities, no twists. */
+  NB.TALK_SCENE_REPLIES = {
+    inn: [
+      "Stew's hot. Sit or don't.",
+      "The river brings all kinds. I don't ask.",
+      "Keep the badges off the oak if they scratch."
+    ],
+    quay: [
+      "Watch your boots. The stones are slick.",
+      "Barges wait for no one.",
+      "Dawn's already late for some of these banners."
+    ],
+    hall: [
+      "Keep your voices for the petitions.",
+      "The hall hears more than it says.",
+      "Doors have names. Yours is not on most of them."
+    ]
+  };
+
+  NB.TALK_CLOSERS = {
+    inn: [
+      "Stew's up.",
+      "Don't let me keep you.",
+      "Go on then."
+    ],
+    quay: [
+      "Don't let me keep you.",
+      "The river's not waiting.",
+      "Go on. Dawn's moving."
+    ],
+    hall: [
+      "Don't let me keep you.",
+      "I've said my piece.",
+      "The petitions will not wait."
+    ]
+  };
+
   NB.PC_COLORS = ["#3d8a82", "#c9a15b", "#8a3a2a", "#4a6aaa", "#7a4a8a", "#4a7a3a"];
 })(window.NB = window.NB || {});

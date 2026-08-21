@@ -164,7 +164,10 @@
       talk: !!spec.talk,
       npcId: spec.npcId || null,
       heardLine: spec.heardLine || null,
-      textLabel: spec.textLabel || null
+      textLabel: spec.textLabel || null,
+      talkTurn: spec.talkTurn | 0,
+      talkMax: spec.talkMax | 0,
+      talkUsed: (spec.talkUsed || []).slice()
     };
   }
   function authoredLines(sc) {
@@ -295,15 +298,50 @@
     if (said) return "You said " + said;
     return "You let that hang.";
   }
-  function pickNpcFollow(id, heard) {
-    var n = NB.NPCS[id];
-    if (!n || !n.lines || !n.lines.length) return "";
-    var used = ((S.heardLines || {})[id] || []).slice();
-    if (heard) used.push(heard);
-    var unused = n.lines.filter(function (l) { return used.indexOf(l) < 0; });
-    if (!unused.length) unused = n.lines.filter(function (l) { return l !== heard; });
-    if (!unused.length) return "";
-    return unused[Math.floor(Math.random() * unused.length)];
+  function talkEndChoices() {
+    return (NB.TALK_END_REPLIES || ["That's enough", "I'll look around", "I'll leave it"]).slice();
+  }
+  function isTalkCloserChoice(choice) {
+    if (!choice) return false;
+    var c = String(choice).trim().toLowerCase();
+    return talkEndChoices().some(function (x) { return String(x).toLowerCase() === c; });
+  }
+  function talkSceneKey() {
+    var id = S.sceneId;
+    if (id === "inn" || id === "pellane") return "inn";
+    if (id === "quay" || id === "procession") return "quay";
+    return "hall";
+  }
+  function talkSceneReplies() {
+    var map = NB.TALK_SCENE_REPLIES || {};
+    return (map[talkSceneKey()] || map.inn || []).slice();
+  }
+  function talkSceneClosers() {
+    var map = NB.TALK_CLOSERS || {};
+    return (map[talkSceneKey()] || ["Don't let me keep you.", "I've said my piece."]).slice();
+  }
+  function pickTalkLine(d, preferCloser) {
+    d = d || {};
+    var used = (d.talkUsed || []).slice();
+    if (d.heardLine && used.indexOf(d.heardLine) < 0) used.push(d.heardLine);
+    function pickFrom(arr, allowRepeat) {
+      var unused = arr.filter(function (l) { return used.indexOf(l) < 0; });
+      var pool = unused.length ? unused : (allowRepeat ? arr : []);
+      if (!pool.length) return "";
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (preferCloser) return pickFrom(talkSceneClosers(), true) || "Don't let me keep you.";
+    var n = NB.NPCS[d.npcId];
+    var npcLines = (n && n.lines) ? n.lines.slice() : [];
+    var pool = npcLines.concat(talkSceneReplies()).filter(function (l) { return used.indexOf(l) < 0; });
+    if (!pool.length) return pickTalkLine(d, true);
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  function rememberTalkLine(d, line) {
+    if (!d || !line) return;
+    d.talkUsed = d.talkUsed || [];
+    if (d.talkUsed.indexOf(line) < 0) d.talkUsed.push(line);
+    markHeard(d.npcId, line);
   }
   function markHeard(id, line) {
     if (!id || !line) return;
@@ -404,25 +442,52 @@
     persist();
     renderChrome();
   }
+  function finishTalk(d, closer) {
+    rememberTalkLine(d, closer);
+    S.resolvedDecisions = S.resolvedDecisions || [];
+    if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
+    S.decision = null;
+    decDraft = { id: "", text: "", choice: "" };
+    setBeat({
+      speakerId: d.npcId || null,
+      lines: [closer || "Don't let me keep you."],
+      index: 0,
+      talk: true
+    }, true);
+    persist();
+    renderChrome();
+  }
   function resolveTalk(d, skipped) {
     var list = submissionList(d);
     var act = null;
     list.forEach(function (s) { if (s.role === "act" && !act) act = s; });
     if (!act) act = list[0] || null;
     var said = skipped && !act ? "You let that hang." : youSaidLine(act);
-    var follow = skipped ? "" : pickNpcFollow(d.npcId, d.heardLine);
-    if (follow) markHeard(d.npcId, follow);
-    S.resolvedDecisions = S.resolvedDecisions || [];
-    if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
-    S.decision = null;
     S.lastAction = said;
+    var closerPick = !!(skipped || !act || isTalkCloserChoice(act.choice));
+    if (closerPick) {
+      finishTalk(d, pickTalkLine(d, true));
+      return;
+    }
+    var turn = (d.talkTurn | 0) + 1;
+    var max = d.talkMax > 0 ? d.talkMax : 4;
+    d.talkTurn = turn;
+    var mustEnd = turn >= max;
+    var line = pickTalkLine(d, mustEnd);
+    var closers = talkSceneClosers();
+    if (mustEnd || !line || closers.indexOf(line) >= 0) {
+      finishTalk(d, line || pickTalkLine(d, true));
+      return;
+    }
+    rememberTalkLine(d, line);
+    d.heardLine = line;
+    d.submissions = {};
+    decDraft = { id: d.id, text: "", choice: "" };
     setBeat({
-      speakerId: null,
-      lines: [said],
+      speakerId: d.npcId,
+      lines: [line],
       index: 0,
-      talk: true,
-      followId: follow ? d.npcId : null,
-      followLine: follow || null
+      talk: true
     }, true);
     persist();
     renderChrome();
@@ -528,6 +593,12 @@
         upsertSubmission(role, decDraft.choice, text);
       });
     }
+    var leave = el.querySelector("#dec-leave");
+    if (leave) {
+      leave.addEventListener("click", function () {
+        upsertSubmission(isActor() ? "act" : "react", "I'll leave it", "");
+      });
+    }
     var cont = el.querySelector("#dec-continue");
     if (cont) cont.addEventListener("click", function () { resolveDecision(false); });
     var skip = el.querySelector("#dec-skip");
@@ -582,13 +653,20 @@
       } else if (isDM()) {
         html += "<p class='dec-status'>No blades on the roster yet — a player can tap I do this, or add a blade on Party.</p>";
       }
-    } else if (d.kind === "solo" && hasActor && iAmActor && voted) {
+    } else if (d.kind === "solo" && hasActor && iAmActor && voted && !d.talk) {
       html += "<p class='dec-status'>You sent that. Tap Continue — or the caption — to move on.</p>";
     } else if (d.kind === "solo" && hasActor && iAmActor) {
-      html += "<p class='dec-status'>You are acting.</p>";
+      html += "<p class='dec-status'>" + (d.talk ? "Keep talking — or wrap it up." : "You are acting.") + "</p>";
       if (d.choices && d.choices.length) {
         html += "<div class='dec-choices'>";
         d.choices.forEach(function (c) {
+          html += "<button type='button' data-choice='" + escapeAttr(c) + "' class='" + (decDraft.choice === c ? "on" : "") + "'>" + escapeHtml(c) + "</button>";
+        });
+        html += "</div>";
+      }
+      if (d.talk) {
+        html += "<p class='dec-label'>Or wrap it up</p><div class='dec-choices dec-ends'>";
+        talkEndChoices().forEach(function (c) {
           html += "<button type='button' data-choice='" + escapeAttr(c) + "' class='" + (decDraft.choice === c ? "on" : "") + "'>" + escapeHtml(c) + "</button>";
         });
         html += "</div>";
@@ -597,7 +675,9 @@
         html += "<div class='dec-field'><label for='dec-text'>" + escapeHtml(textLabel) + "</label>";
         html += "<textarea id='dec-text' maxlength='280' placeholder='Type it.'>" + escapeHtml(decDraft.text) + "</textarea></div>";
       }
-      html += "<div class='dec-actions'><button type='button' class='btn brass' id='dec-send'>Send</button></div>";
+      html += "<div class='dec-actions'><button type='button' class='btn brass' id='dec-send'>Send</button>";
+      if (d.talk) html += "<button type='button' class='btn slim' id='dec-leave'>I'll leave it</button>";
+      html += "</div>";
     } else if (d.kind === "solo" && hasActor && !iAmActor) {
       html += "<p class='dec-status'>" + escapeHtml(d.actorName) + " is acting…</p>";
       if (d.reacts && d.reacts.length) {
@@ -629,12 +709,18 @@
     }
 
     html += tallyHtml(d);
-    if (d.kind === "solo" && hasActor && !actorSubmitted() && !isDM()) {
+    if (d.kind === "solo" && hasActor && !actorSubmitted() && !isDM() && !iAmActor) {
       html += "<p class='dec-status'>Waiting on " + escapeHtml(d.actorName) + ".</p>";
     }
     html += "</div>";
 
-    if (isDM() || canPlayerContinue() || voted) {
+    if (d.talk) {
+      if (isDM()) {
+        html += "<div class='dec-advance'><div class='dec-actions'>";
+        html += "<button type='button' class='btn slim' id='dec-skip'>Skip</button>";
+        html += "</div></div>";
+      }
+    } else if (isDM() || canPlayerContinue() || voted) {
       html += "<div class='dec-advance'><div class='dec-actions'>";
       html += "<button type='button' class='btn brass' id='dec-continue'>Continue</button>";
       if (isDM()) html += "<button type='button' class='btn slim' id='dec-skip'>Skip</button>";
@@ -824,7 +910,8 @@
     }
     if (decisionOpen()) {
       hint.classList.remove("hidden");
-      hint.textContent = canGo ? "tap to continue" : "a decision waits";
+      if (S.decision.talk) hint.textContent = "answer them";
+      else hint.textContent = canGo ? "tap to continue" : "a decision waits";
       return;
     }
     if (more || talkMore) {
@@ -890,6 +977,9 @@
       talk: true,
       npcId: id,
       heardLine: pick,
+      talkTurn: 0,
+      talkMax: 3 + Math.floor(Math.random() * 3),
+      talkUsed: [pick],
       textLabel: "What do you say?"
     }, false);
     persist();
@@ -905,6 +995,7 @@
       return;
     }
     if (decisionOpen()) {
+      if (S.decision.talk) return;
       if (canPlayerContinue() || playerHasVoted()) resolveDecision(false);
       return;
     }
