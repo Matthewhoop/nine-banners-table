@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0c1210">
   <meta name="mobile-web-app-capable" content="yes">
   <title>Nine Banners · The Table</title>
-  <link rel="stylesheet" href="css/table.css?v=20260821h">
+  <link rel="stylesheet" href="css/table.css?v=20260821j">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect fill='%230c1210' width='16' height='16'/%3E%3Crect fill='%23c9a15b' x='2' y='3' width='2' height='8'/%3E%3Crect fill='%232a6b6b' x='5' y='3' width='2' height='8'/%3E%3Crect fill='%238b3a2a' x='8' y='3' width='2' height='8'/%3E%3Crect fill='%23d4b46a' x='11' y='3' width='2' height='8'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -58,6 +58,9 @@
           </div>
         </div>
         <div class="topbar-right">
+          <button type="button" class="chip stage-chip" id="btn-auto" aria-pressed="false" title="Tap or auto-advance">Tap</button>
+          <button type="button" class="chip stage-chip" id="btn-voice" aria-pressed="true" title="Read captions aloud">Voice</button>
+          <button type="button" class="chip stage-chip" id="btn-sound" aria-pressed="true" title="Area sound">Sound</button>
           <button type="button" class="chip" id="btn-feedback">Feedback</button>
           <button type="button" class="chip" id="btn-role" title="Switch role">Role</button>
         </div>
@@ -166,13 +169,14 @@
     <div id="fb-toast" class="fb-toast hidden" role="status">Got it. Thanks.</div>
   </div>
 
-  <script src="js/data.js?v=20260821h"></script>
-  <script src="js/coach.js?v=20260821h"></script>
-  <script src="js/pix.js?v=20260821h"></script>
-  <script src="js/state.js?v=20260821h"></script>
-  <script src="js/feedback.js?v=20260821h"></script>
+  <script src="js/data.js?v=20260821j"></script>
+  <script src="js/coach.js?v=20260821j"></script>
+  <script src="js/pix.js?v=20260821j"></script>
+  <script src="js/state.js?v=20260821j"></script>
+  <script src="js/feedback.js?v=20260821j"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="js/sync.js?v=20260821h"></script>
-  <script src="js/app.js?v=20260821h"></script>
+  <script src="js/sync.js?v=20260821j"></script>
+  <script src="js/audio.js?v=20260821j"></script>
+  <script src="js/app.js?v=20260821j"></script>
 </body>
 </html>
