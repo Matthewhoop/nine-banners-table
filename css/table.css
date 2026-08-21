@@ -171,6 +171,11 @@ textarea { min-height: 88px; resize: vertical; }
   background: #1c1812; color: var(--brass); font-size: 13px;
   flex: 0 0 auto; white-space: nowrap;
 }
+.chip.on {
+  border-color: var(--brass);
+  color: var(--cream);
+  background: #2a2218;
+}
 .topbar-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 
 .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -904,10 +909,19 @@ body.is-stage #pad-status,
 body.is-stage #pad-talk {
   display: none !important;
 }
-body.is-stage #btn-feedback {
+body.is-stage #btn-feedback,
+body.is-stage .stage-chip {
   min-height: 32px;
   padding: 0 10px;
   font-size: 11px;
+}
+body.is-controller .stage-chip {
+  display: inline-flex;
+}
+.stage-chip {
+  min-height: 36px;
+  padding: 0 12px;
+  font-weight: 700;
 }
 body.is-stage #panel-stage {
   flex: 1;
