@@ -373,6 +373,11 @@
           choices: ["Sera’s toast", "Pava’s toast", "Dreth’s toast", "Kell’s toast"],
           allowText: true,
           closer: "The hymn is still coming. Night 1 holds.",
+          endCard: {
+            title: "Night 1 holds",
+            line: "The hymn is still coming. Night 1 holds.",
+            note: "The table will open again."
+          },
           after: {
             "Sera’s toast": "Sera’s cup is brief and exact. She drinks like a woman who still has work.",
             "Pava’s toast": "Pava toasts the city that offered a table. Gold chain, river-cold eyes.",

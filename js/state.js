@@ -25,9 +25,26 @@
       resolvedDecisions: [],
       talkReturn: null,
       pendingNextScene: null,
-      heardLines: {}
+      heardLines: {},
+      started: false,
+      endCard: null,
+      updatedAt: 0,
+      rev: 0,
+      presence: {}
     };
   }
+
+  NB.blankState = blankState;
+
+  NB.clearStoryState = function (state) {
+    var blank = blankState();
+    var keep = { pin: true, tableCode: true, party: true, lastRoll: true };
+    Object.keys(blank).forEach(function (k) {
+      if (keep[k]) return;
+      state[k] = blank[k];
+    });
+    return state;
+  };
 
   NB.newPc = function (name, color) {
     return {
@@ -63,12 +80,17 @@
     }
   };
 
+  NB.syncClientId = clientId;
   NB.saveState = function (state, broadcast) {
     try { localStorage.setItem(NB.STATE_KEY, JSON.stringify(state)); } catch (e) {}
     if (broadcast !== false && bc && !applying) {
       try { bc.postMessage({ clientId: clientId, state: state }); } catch (e2) {}
     }
+    if (broadcast !== false && !applying && typeof NB.afterSave === "function") {
+      try { NB.afterSave(state); } catch (e3) {}
+    }
   };
+  NB.setApplying = function (on) { applying = !!on; };
 
   NB.onRemoteState = function (fn) {
     if (!bc) return;

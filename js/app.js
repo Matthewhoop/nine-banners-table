@@ -6,6 +6,8 @@
   var t = 0;
   var localShown = 0;
   var typeAcc = 0;
+  var autoHold = 0;
+  var AUTO_ADVANCE_MS = 2500;
   var lastBeatSig = "";
   var decDraft = { id: "", text: "", choice: "" };
   var canvas, ctx;
@@ -20,7 +22,14 @@
   function $(id) { return document.getElementById(id); }
   function scene() { return NB.SCENES[S.sceneId] || NB.SCENES.inn; }
   function isDM() { return sess.role === "dm"; }
-  function persist() { NB.saveState(S, true); }
+  function persist(broadcast) {
+    if (broadcast !== false) {
+      S.updatedAt = Date.now();
+      S.rev = (S.rev | 0) + 1;
+    }
+    NB.saveState(S, broadcast !== false);
+    if (broadcast !== false && typeof NB.pushSync === "function") NB.pushSync(S);
+  }
   function isFaceoff() { return S.stageMode === "faceoff"; }
 
   function myPc() {
@@ -30,9 +39,75 @@
   }
 
   function visibleParty() {
-    if (isDM()) return S.party;
-    var me = myPc();
-    return me ? [me] : [];
+    return S.party || [];
+  }
+
+  function lookForPc(pc) {
+    var base = NB.LOOKS.player || {};
+    var color = (pc && pc.color) || base.tunic;
+    var look = {};
+    Object.keys(base).forEach(function (k) { look[k] = base[k]; });
+    look.tunic = color;
+    look.accent = color;
+    return look;
+  }
+
+  function livePeople() {
+    var seen = {};
+    var out = [];
+    function add(pc) {
+      if (!pc || !pc.name) return;
+      var k = String(pc.name).trim().toLowerCase();
+      if (!k || seen[k]) return;
+      seen[k] = true;
+      out.push(pc);
+    }
+    (S.party || []).forEach(add);
+    var pres = S.presence;
+    if (pres && !Array.isArray(pres)) {
+      Object.keys(pres).forEach(function (k) {
+        var e = pres[k];
+        if (!e || !e.at || (Date.now() - e.at) > 40000) return;
+        add({
+          id: e.id || ("live-" + k),
+          name: e.name || k,
+          hp: e.hp != null ? e.hp : 12,
+          maxHp: e.maxHp != null ? e.maxHp : 12,
+          color: e.color || "#c9a15b"
+        });
+      });
+    }
+    return out;
+  }
+
+  function paintLiveRow() {
+    var el = $("live-row");
+    if (!el) return;
+    var names = [];
+    var seen = {};
+    function addName(name) {
+      var n = String(name || "").trim();
+      var k = n.toLowerCase();
+      if (!n || !k || seen[k] || k === "guest") return;
+      seen[k] = true;
+      names.push(n);
+    }
+    var pres = S.presence;
+    if (pres && !Array.isArray(pres)) {
+      Object.keys(pres).forEach(function (k) {
+        var e = pres[k];
+        if (e && e.at && (Date.now() - e.at) <= 40000) addName(e.name || k);
+      });
+    }
+    addName(displayName());
+    (S.party || []).forEach(function (pc) { addName(pc.name); });
+    if (!names.length) {
+      el.classList.add("hidden");
+      el.textContent = "";
+      return;
+    }
+    el.classList.remove("hidden");
+    el.textContent = names.join(" · ");
   }
 
   function sceneBeats(sc) {
@@ -51,6 +126,7 @@
     if (resetType !== false) {
       localShown = reduceMotion ? 9999 : 0;
       typeAcc = 0;
+      autoHold = 0;
     }
   }
 
@@ -118,7 +194,14 @@
     if (liveCount <= 1) return 1;
     var party = S.party || [];
     if (party.length <= 1) return 1;
-    var peersLive = peerSeenAt && (Date.now() - peerSeenAt) < 30000;
+    var pres = S.presence;
+    var presLive = 0;
+    if (pres && !Array.isArray(pres)) {
+      Object.keys(pres).forEach(function (k) {
+        if (pres[k] && pres[k].at && (Date.now() - pres[k].at) <= 40000) presLive += 1;
+      });
+    }
+    var peersLive = presLive > 1 || (peerSeenAt && (Date.now() - peerSeenAt) < 30000);
     if (!peersLive) return 1;
     var n = 0;
     party.forEach(function (p) {
@@ -163,6 +246,7 @@
       after: spec.after || null,
       nextScene: spec.nextScene || null,
       closer: spec.closer || null,
+      endCard: spec.endCard || null,
       talk: !!spec.talk,
       npcId: spec.npcId || null,
       heardLine: spec.heardLine || null,
@@ -429,6 +513,7 @@
     lastBeatSig = beatSig();
     localShown = reduceMotion ? 9999 : 0;
     typeAcc = 0;
+    autoHold = 0;
   }
   function returnFromTalk() {
     var ret = S.talkReturn;
@@ -531,6 +616,36 @@
     if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
     S.decision = null;
     if (summary) S.lastAction = summary;
+    if (nextId && NB.SCENES[nextId]) {
+      S.pendingNextScene = null;
+      applyScene(nextId);
+      var open = [];
+      if (after) open.push(after);
+      if (closer && closer !== after) open.push(closer);
+      if (open.length) {
+        S.beat.lines = open.concat(sceneBeats(scene()));
+        S.beat.index = 0;
+        S.beat.speakerId = null;
+        finishBeatReset();
+        persist();
+        renderChrome();
+      }
+      return;
+    }
+    S.pendingNextScene = null;
+    if (d.endCard) {
+      S.endCard = {
+        title: d.endCard.title || "Night 1 holds",
+        line: d.endCard.line || d.closer || "",
+        note: d.endCard.note || "The table will open again."
+      };
+    } else if (d.closer && S.sceneId === "banquet") {
+      S.endCard = {
+        title: "Night 1 holds",
+        line: d.closer,
+        note: "The table will open again."
+      };
+    }
     ensureBeat();
     var lines = (S.beat.lines || []).slice();
     var idx = S.beat.index | 0;
@@ -540,8 +655,6 @@
     if (!extras.length && idx >= lines.length - 1) {
       extras.push(after || summary || "The table takes that as the move.");
     }
-    if (nextId && NB.SCENES[nextId]) S.pendingNextScene = nextId;
-    else S.pendingNextScene = null;
     if (extras.length) {
       lines = lines.slice(0, idx + 1).concat(extras, lines.slice(idx + 1));
       S.beat.lines = lines;
@@ -550,12 +663,6 @@
       finishBeatReset();
       persist();
       renderChrome();
-      return;
-    }
-    if (nextId && NB.SCENES[nextId]) {
-      finishBeatReset();
-      persist();
-      applyPendingScene();
       return;
     }
     if (idx < lines.length - 1) {
@@ -790,6 +897,94 @@
   function showJoin() {
     $("view-join").classList.remove("hidden");
     $("view-table").classList.add("hidden");
+    var name = $("input-name");
+    if (name) {
+      if (sess.name && !name.value) name.value = sess.name;
+      try { name.focus(); } catch (e) {}
+    }
+    paintJoinActions();
+  }
+
+  function tableIdle() {
+    if (S.started) return false;
+    if (S.stageMode === "faceoff") return false;
+    if (S.decision && S.decision.status === "open") return false;
+    if ((S.resolvedDecisions || []).length) return false;
+    if (S.pendingNextScene) return false;
+    if (S.talkReturn) return false;
+    if (S.endCard) return false;
+    if (S.sceneId && S.sceneId !== "inn") return false;
+    if (S.beat) {
+      if ((S.beat.index | 0) > 0) return false;
+      if (S.beat.speakerId || S.beat.talk) return false;
+    }
+    return true;
+  }
+
+  function recoverStuckScene() {
+    if (decisionOpen() || isFaceoff()) return false;
+    if (S.beat && S.beat.talk) return false;
+    if (S.talkReturn) return false;
+    var id = chainedNextScene();
+    if (!id) return false;
+    applyScene(id);
+    return true;
+  }
+
+  function leftoverTable() {
+    if (S.started) return true;
+    if (S.sceneId && S.sceneId !== "inn") return true;
+    return !tableIdle();
+  }
+
+  function paintJoinActions() {
+    var leftover = leftoverTable();
+    var sit = $("btn-sit");
+    var leftoverEl = $("join-leftover");
+    if (sit) sit.classList.toggle("hidden", leftover);
+    if (leftoverEl) leftoverEl.classList.toggle("hidden", !leftover);
+    var dmSit = $("btn-dm-sit");
+    var dmLeft = $("join-dm-leftover");
+    if (dmSit) dmSit.classList.toggle("hidden", leftover);
+    if (dmLeft) dmLeft.classList.toggle("hidden", !leftover);
+  }
+
+  function takePlayerName() {
+    var name = ($("input-name").value || "").trim();
+    if (!name) { $("input-name").focus(); return false; }
+    sess.role = "player";
+    sess.name = name;
+    return true;
+  }
+
+  function takeDmPin() {
+    sess.role = "dm";
+    sess.pin = ($("input-pin").value || NB.DEFAULT_PIN).trim().toUpperCase() || NB.DEFAULT_PIN;
+    S.pin = sess.pin;
+  }
+
+  function wipeTable() {
+    NB.clearStoryState(S);
+    S.started = false;
+    persist(false);
+  }
+
+  function startFreshStory() {
+    wipeTable();
+  }
+
+  function startDay1() {
+    S.started = true;
+    S.sceneId = "inn";
+    S.stageMode = "story";
+    S.faceoff = null;
+    S.lastAction = "";
+    S.decision = null;
+    S.talkReturn = null;
+    S.pendingNextScene = null;
+    S.resolvedDecisions = [];
+    S.endCard = null;
+    setBeat({ speakerId: null, lines: sceneBeats(NB.SCENES.inn), index: 0 }, true);
   }
 
   function enterTable() {
@@ -805,10 +1000,14 @@
       }
     }
     markJoined();
+    if (tableIdle()) startDay1();
+    else S.started = true;
+    recoverStuckScene();
     persist();
     if (S.stageMode === "overworld") S.stageMode = "story";
     ensureBeat();
     lastBeatSig = beatSig();
+    autoHold = 0;
     renderChrome();
     renderPanel();
     fitCanvas();
@@ -816,6 +1015,11 @@
 
   function parseQuery() {
     var q = new URLSearchParams(location.search);
+    if (q.get("fresh") === "1") {
+      try { localStorage.removeItem(NB.STATE_KEY); } catch (e) {}
+      S = NB.loadState();
+      try { history.replaceState({}, "", location.pathname + (location.hash || "")); } catch (e2) {}
+    }
     if (q.get("dm") === "1" || q.get("role") === "dm") {
       sess.role = "dm";
       sess.pin = q.get("pin") || S.pin || NB.DEFAULT_PIN;
@@ -841,6 +1045,13 @@
     $("top-scene").textContent = sc.name;
     $("top-code").textContent = S.tableCode;
     $("top-role").textContent = isDM() ? "DM" : (sess.name || "player");
+    var liveEl = $("top-live");
+    if (liveEl) {
+      var n = (typeof NB.syncLiveCount === "function") ? NB.syncLiveCount(S) : (S.party || []).length;
+      var on = typeof NB.syncLinked === "function" && NB.syncLinked();
+      liveEl.textContent = on ? ("live · " + Math.max(1, n)) : "this phone";
+      liveEl.classList.toggle("live", !!on);
+    }
     $("btn-role").textContent = isDM() ? "DM" : "Player";
     $("dm-stage-tools").classList.toggle("hidden", !isDM());
     $("btn-add-pc").classList.toggle("hidden", !isDM());
@@ -858,8 +1069,10 @@
     renderCast();
     renderCaption();
     renderDecision();
+    renderEndCard();
     renderChromeLight();
     renderHpStrip();
+    paintLiveRow();
     if (isFaceoff()) renderFaceoffUI();
     fitCanvas();
   }
@@ -867,8 +1080,8 @@
   function renderHpStrip() {
     var el = $("hp-strip");
     if (!el) return;
-    var pcs = visibleParty();
-    if (!S.party.length || !pcs.length) {
+    var pcs = livePeople();
+    if (!pcs.length) {
       el.classList.add("hidden");
       el.innerHTML = "";
       el.setAttribute("aria-hidden", "true");
@@ -952,6 +1165,11 @@
       else hint.textContent = canGo ? "tap to continue" : "a decision waits";
       return;
     }
+    if (showingEndCard()) {
+      hint.classList.add("hidden");
+      hint.textContent = "";
+      return;
+    }
     if (more || talkMore || sceneMore) {
       hint.classList.remove("hidden");
       hint.textContent = "tap to continue";
@@ -959,6 +1177,53 @@
     }
     hint.classList.add("hidden");
     hint.textContent = "tap to continue";
+  }
+
+  function banquetEndSpec() {
+    var sc = NB.SCENES.banquet || {};
+    var decs = sc.decisions || [];
+    for (var i = 0; i < decs.length; i++) {
+      if (decs[i].endCard || decs[i].closer) return decs[i];
+    }
+    return null;
+  }
+  function night1EndSpec() {
+    if (S.endCard) return S.endCard;
+    var spec = banquetEndSpec();
+    var closer = (spec && spec.closer) || "The hymn is still coming. Night 1 holds.";
+    var card = spec && spec.endCard;
+    if (S.sceneId !== "banquet") return null;
+    if (decisionOpen() || isFaceoff()) return null;
+    var line = currentLine();
+    if (line === closer || (card && line === card.line)) {
+      return card || { title: "Night 1 holds", line: closer, note: "The table will open again." };
+    }
+    return null;
+  }
+  function showingEndCard() {
+    if (isFaceoff() || decisionOpen()) return false;
+    var card = night1EndSpec();
+    if (!card) return false;
+    if (!S.beat || !(S.beat.lines || []).length) return false;
+    return (S.beat.index | 0) >= ((S.beat.lines || []).length - 1);
+  }
+  function renderEndCard() {
+    var el = $("end-card");
+    var page = $("story-page");
+    if (!el) return;
+    if (!showingEndCard()) {
+      el.classList.add("hidden");
+      el.innerHTML = "";
+      if (page) page.classList.remove("has-end");
+      return;
+    }
+    var card = night1EndSpec();
+    el.innerHTML =
+      "<h3 class='end-title'>" + escapeHtml(card.title || "Night 1 holds") + "</h3>" +
+      "<p class='end-line'>" + escapeHtml(card.line || "The hymn is still coming. Night 1 holds.") + "</p>" +
+      "<p class='end-note'>" + escapeHtml(card.note || "The table will open again.") + "</p>";
+    el.classList.remove("hidden");
+    if (page) page.classList.add("has-end");
   }
   function renderCaption() {
     ensureBeat();
@@ -1024,19 +1289,29 @@
     renderChrome();
   }
 
-  function tapCaption() {
-    ensureBeat();
+  function atTable() {
+    var v = $("view-table");
+    return !!(sess.role && v && !v.classList.contains("hidden"));
+  }
+
+  function canAutoAdvance() {
+    if (!atTable()) return false;
+    if (isFaceoff()) return false;
+    if (decisionOpen()) return false;
+    if (!S.beat || !(S.beat.lines || []).length) return false;
     var full = currentLine();
-    if (localShown < full.length) {
-      localShown = full.length;
-      renderCaption();
-      return;
-    }
-    if (decisionOpen()) {
-      if (S.decision.talk) return;
-      if (canPlayerContinue() || playerHasVoted()) resolveDecision(false);
-      return;
-    }
+    if (localShown < full.length) return false;
+    if ((S.beat.index | 0) < ((S.beat.lines || []).length - 1)) return true;
+    if (S.beat.followLine) return true;
+    if (S.talkReturn || S.beat.talk) return true;
+    if (chainedNextScene()) return true;
+    return false;
+  }
+
+  function advanceStory() {
+    ensureBeat();
+    if (decisionOpen() || isFaceoff()) return false;
+    autoHold = 0;
     if ((S.beat.index | 0) < (S.beat.lines || []).length - 1) {
       S.beat.index = (S.beat.index | 0) + 1;
       lastBeatSig = beatSig();
@@ -1046,7 +1321,9 @@
       renderCaption();
       syncSceneDecision();
       renderDecision();
-      return;
+      renderEndCard();
+      renderChromeLight();
+      return true;
     }
     if (S.beat && S.beat.followLine) {
       var fid = S.beat.followId;
@@ -1054,15 +1331,34 @@
       setBeat({ speakerId: fid, lines: [fl], index: 0, talk: true }, true);
       persist();
       renderChrome();
-      return;
+      return true;
     }
     if (S.talkReturn || (S.beat && S.beat.talk)) {
       returnFromTalk();
+      return true;
+    }
+    if (chainedNextScene()) {
+      applyPendingScene();
+      return true;
+    }
+    return false;
+  }
+
+  function tapCaption() {
+    ensureBeat();
+    var full = currentLine();
+    if (localShown < full.length) {
+      localShown = full.length;
+      autoHold = 0;
+      renderCaption();
       return;
     }
-    if (S.pendingNextScene) {
-      applyPendingScene();
+    if (decisionOpen()) {
+      if (S.decision.talk) return;
+      if (canPlayerContinue() || playerHasVoted()) resolveDecision(false);
+      return;
     }
+    advanceStory();
   }
 
   function setPanel(name) {
@@ -1277,12 +1573,31 @@
     ctx.imageSmoothingEnabled = false;
     var sc = scene();
     NB.drawSceneCover(ctx, sc, isFaceoff() ? "faceoff" : "story", viewW, viewH);
-    if (!isFaceoff()) return;
+    if (!isFaceoff()) {
+      var pcs = livePeople();
+      if (pcs.length) {
+        var standH = Math.max(34, Math.round(viewH * 0.26));
+        var standY = Math.round(viewH * 0.84);
+        var left = viewW * 0.18;
+        var right = viewW * 0.82;
+        pcs.forEach(function (pc, i) {
+          var x = pcs.length === 1 ? viewW * 0.50 : left + ((right - left) * i) / (pcs.length - 1);
+          NB.drawActor(ctx, "player", Math.round(x), standY, {
+            t: t,
+            h: standH,
+            facing: "down",
+            label: pc.name,
+            look: lookForPc(pc)
+          });
+        });
+      }
+      return;
+    }
     var me = myPc();
     var figH = Math.max(72, Math.round(viewH * 0.48));
     var ground = Math.round(viewH * 0.86);
     NB.drawActor(ctx, "player", Math.round(viewW * 0.30), ground, {
-      t: t, h: figH, facing: "right", label: me ? me.name : "You"
+      t: t, h: figH, facing: "right", label: me ? me.name : "You", look: lookForPc(me)
     });
     var oid = (S.faceoff && S.faceoff.opponentId) || "dreth";
     var n = NB.NPCS[oid];
@@ -1311,6 +1626,15 @@
         var el = $("cap-nar");
         if (el) el.textContent = full.slice(0, localShown);
         paintCaptionHint();
+        autoHold = 0;
+      } else if (canAutoAdvance()) {
+        autoHold += dt;
+        if (autoHold >= AUTO_ADVANCE_MS) {
+          autoHold = 0;
+          advanceStory();
+        }
+      } else {
+        autoHold = 0;
       }
     }
     draw();
@@ -1326,6 +1650,7 @@
 
   function applyScene(id) {
     S.pendingNextScene = null;
+    S.endCard = null;
     S.sceneId = id;
     var sc = scene();
     S.px = sc.spawn.x;
@@ -1580,29 +1905,48 @@
     paintJoinBanners();
     $("join-code").textContent = S.tableCode;
     $("btn-open-dm").addEventListener("click", function () {
-      $("form-dm").classList.remove("hidden");
-      $("form-player").classList.add("hidden");
-    });
-    $("btn-show-player").addEventListener("click", function () {
-      $("form-player").classList.remove("hidden");
-      $("form-dm").classList.add("hidden");
+      $("form-dm").classList.toggle("hidden");
+      var pin = $("input-pin");
+      if (pin && !$("form-dm").classList.contains("hidden")) {
+        try { pin.focus(); } catch (e2) {}
+      }
     });
     $("form-dm").addEventListener("submit", function (e) {
       e.preventDefault();
-      sess.role = "dm";
-      sess.pin = ($("input-pin").value || NB.DEFAULT_PIN).trim().toUpperCase() || NB.DEFAULT_PIN;
-      S.pin = sess.pin;
+      takeDmPin();
       persist();
       enterTable();
     });
     $("form-player").addEventListener("submit", function (e) {
       e.preventDefault();
-      var name = ($("input-name").value || "").trim();
-      if (!name) { $("input-name").focus(); return; }
-      sess.role = "player";
-      sess.name = name;
+      if (!takePlayerName()) return;
       enterTable();
     });
+    $("btn-fresh").addEventListener("click", function () {
+      wipeTable();
+      paintJoinActions();
+      var name = $("input-name");
+      if (name) try { name.focus(); } catch (e3) {}
+    });
+    $("btn-dm-fresh").addEventListener("click", function () {
+      wipeTable();
+      paintJoinActions();
+    });
+    if ($("btn-resume")) {
+      $("btn-resume").addEventListener("click", function (e) {
+        e.preventDefault();
+        if (!takePlayerName()) return;
+        enterTable();
+      });
+    }
+    if ($("btn-dm-resume")) {
+      $("btn-dm-resume").addEventListener("click", function (e) {
+        e.preventDefault();
+        takeDmPin();
+        persist();
+        enterTable();
+      });
+    }
 
     document.querySelectorAll(".dock-btn").forEach(function (b) {
       b.addEventListener("click", function () { setPanel(b.getAttribute("data-panel")); });
@@ -1651,21 +1995,82 @@
 
   NB.onRemoteState(function (next) {
     peerSeenAt = Date.now();
+    var merged = (typeof NB.mergeRemote === "function") ? NB.mergeRemote(S, next, {}) : next;
+    applyRemoteState(merged);
+  });
+
+  function applyRemoteState(next, meta) {
+    if (!next) return;
+    meta = meta || {};
+    if (meta.presenceOnly) {
+      S.presence = next.presence || S.presence;
+      NB.setApplying(true);
+      try { persist(false); } finally { NB.setApplying(false); }
+      var liveEl = $("top-live");
+      if (liveEl && typeof NB.syncLiveCount === "function") {
+        var n = NB.syncLiveCount(S);
+        var on = NB.syncLinked();
+        liveEl.textContent = on ? ("live · " + Math.max(1, n)) : "this phone";
+        liveEl.classList.toggle("live", !!on);
+      }
+      renderHpStrip();
+      paintLiveRow();
+      return;
+    }
+    var myName = sess.name;
+    var keepPc = myPc();
+    NB.setApplying(true);
     S = next;
     if (S.stageMode === "overworld") S.stageMode = "story";
+    var added = false;
+    if (sess.role === "player" && myName) {
+      var exists = (S.party || []).some(function (p) { return p.name && p.name.toLowerCase() === myName.toLowerCase(); });
+      if (!exists) {
+        S.party = S.party || [];
+        S.party.push(keepPc || NB.newPc(myName, NB.PC_COLORS[S.party.length % NB.PC_COLORS.length]));
+        added = true;
+      }
+    }
+    try { persist(false); } finally { NB.setApplying(false); }
+    if (added && typeof NB.pushSync === "function") persist();
+    peerSeenAt = Date.now();
+    if (!$("view-join").classList.contains("hidden")) {
+      paintJoinActions();
+      return;
+    }
     if (beatSig() !== lastBeatSig) {
       localShown = reduceMotion ? 9999 : 0;
       typeAcc = 0;
+      autoHold = 0;
       lastBeatSig = beatSig();
     }
     renderChrome();
     renderPanel();
-  });
+  }
+
+  NB.afterSave = function () {
+    if (typeof NB.pushSync === "function") NB.pushSync();
+  };
 
   canvas = $("stage");
   ctx = canvas.getContext("2d");
   bind();
   parseQuery();
+  if (typeof NB.initSync === "function") {
+    NB.initSync({
+      getState: function () { return S; },
+      getMe: function () {
+        var pc = myPc();
+        return {
+          key: myKey(),
+          name: displayName(),
+          color: (pc && pc.color) || "#3d8a82",
+          pc: pc
+        };
+      },
+      applyState: applyRemoteState
+    });
+  }
   NB.loadArt().then(function () {
     if (sess.role) enterTable();
     else showJoin();

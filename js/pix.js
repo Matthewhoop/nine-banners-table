@@ -130,7 +130,7 @@
     var bob = 0;
     if (walking) bob = (Math.floor(t / 8) % 2) ? -1 : 0;
     else bob = (Math.floor(t / 28) % 2) ? 0 : -1;
-    var look = NB.LOOKS[id] || NB.LOOKS.player;
+    var look = opts.look || NB.LOOKS[id] || NB.LOOKS.player;
     var spr = sprites[id] || (id === "player" ? sprites.player : null);
     ctx.save();
     ctx.translate(Math.round(x), Math.round(y + bob));
@@ -141,6 +141,14 @@
       var dh = Math.round(spr.height * scale);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(spr, -Math.round(dw / 2), -dh, dw, dh);
+      if (look && look.tunic && opts.look) {
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = look.tunic;
+        ctx.fillRect(-Math.round(dw / 2), -dh, dw, dh);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
     } else {
       var sc = h / 26;
       ctx.translate(-Math.round(8 * sc), -Math.round(26 * sc));
