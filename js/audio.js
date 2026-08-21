@@ -174,7 +174,7 @@
   function startInn() {
     var src = track(noiseSrc(true));
     var lp = track(filter("lowpass", 520, 0.7));
-    var g = track(gain(0.045));
+    var g = track(gain(0.14));
     src.connect(lp);
     lp.connect(g);
     g.connect(bedGain);
@@ -182,19 +182,19 @@
     lfo(0.07, lp.frequency, 80, 520);
 
     var hum = track(osc("sine", 78));
-    var hg = track(gain(0.012));
+    var hg = track(gain(0.03));
     hum.connect(hg);
     hg.connect(bedGain);
     hum.start();
 
     var murmur = track(noiseSrc(true));
     var bp = track(filter("bandpass", 280, 0.9));
-    var mg = track(gain(0.028));
+    var mg = track(gain(0.07));
     murmur.connect(bp);
     bp.connect(mg);
     mg.connect(bedGain);
     murmur.start();
-    lfo(0.11, mg.gain, 0.01, 0.028);
+    lfo(0.11, mg.gain, 0.03, 0.07);
 
     function crackle() {
       if (ambientId !== "inn" || !ctx) return;
@@ -208,7 +208,7 @@
       var now = ctx.currentTime;
       var dur = 0.018 + Math.random() * 0.05;
       cg.gain.setValueAtTime(0, now);
-      cg.gain.linearRampToValueAtTime(0.035 + Math.random() * 0.04, now + 0.004);
+      cg.gain.linearRampToValueAtTime(0.09 + Math.random() * 0.08, now + 0.004);
       cg.gain.exponentialRampToValueAtTime(0.0001, now + dur);
       try { n.start(); n.stop(now + dur + 0.02); } catch (e) {}
       later(crackle, 180 + Math.random() * 900);
@@ -219,30 +219,30 @@
   function startQuay() {
     var water = track(noiseSrc(true));
     var lp = track(filter("lowpass", 640, 0.8));
-    var wg = track(gain(0.05));
+    var wg = track(gain(0.14));
     water.connect(lp);
     lp.connect(wg);
     wg.connect(bedGain);
     water.start();
     lfo(0.13, lp.frequency, 180, 640);
-    lfo(0.09, wg.gain, 0.016, 0.05);
+    lfo(0.09, wg.gain, 0.05, 0.14);
 
     var wind = track(noiseSrc(true));
     var hp = track(filter("highpass", 700, 0.6));
     var bp = track(filter("bandpass", 1400, 0.5));
-    var vg = track(gain(0.018));
+    var vg = track(gain(0.05));
     wind.connect(hp);
     hp.connect(bp);
     bp.connect(vg);
     vg.connect(bedGain);
     wind.start();
-    lfo(0.05, vg.gain, 0.008, 0.018);
+    lfo(0.05, vg.gain, 0.02, 0.05);
   }
 
   function startHall(tight) {
     var hush = track(noiseSrc(true));
     var lp = track(filter("lowpass", tight ? 280 : 360, 0.8));
-    var hg = track(gain(tight ? 0.016 : 0.028));
+    var hg = track(gain(tight ? 0.04 : 0.07));
     hush.connect(lp);
     lp.connect(hg);
     hg.connect(bedGain);
@@ -250,7 +250,7 @@
 
     var crowd = track(noiseSrc(true));
     var bp = track(filter("bandpass", tight ? 220 : 310, 1.1));
-    var cg = track(gain(tight ? 0.01 : 0.02));
+    var cg = track(gain(tight ? 0.025 : 0.05));
     crowd.connect(bp);
     bp.connect(cg);
     cg.connect(bedGain);
@@ -282,7 +282,7 @@
   }
 
   function setAmbient(id) {
-    if (!isStage() || !unlocked || !id) {
+    if (!unlocked || !id) {
       if (ambientId) {
         stopBeds(600);
         ambientId = "";
@@ -356,7 +356,7 @@
   }
 
   function speakLine(text, speakerId) {
-    if (!isStage() || !unlocked) return;
+    if (!unlocked) return;
     var plain = stripHtml(text);
     if (!plain) return;
     var key = String(speakerId || "") + "|" + plain;

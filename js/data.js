@@ -620,7 +620,8 @@
       { intent: "buy", keys: ["buy", "pay", "round", "ale", "drink", "stew", "bottle"] },
       { intent: "wait", keys: ["wait", "hold", "stay", "linger"] },
       { intent: "leave", keys: ["leave", "go", "walk", "out", "away"] },
-      { intent: "steel", keys: ["draw", "sword", "steel", "fight", "threaten", "stab"] }
+      { intent: "steel", keys: ["draw", "sword", "steel", "threaten", "stab"] },
+      { intent: "argue", keys: ["fight", "argu", "break up", "stop them", "step in", "between", "split them"] }
     ],
     inn: [
       { intent: "bar", choice: "Sit at the bar", keys: ["bar", "stool", "oak", "mara"] },
@@ -660,6 +661,7 @@
       wait: "You hold. The moment does not mind waiting with you.",
       leave: "You give the room your back. It keeps talking.",
       steel: "Steel is a last language. You keep it sheathed. The room still saw the thought.",
+      argue: "You step between the two voices. Hands stay off hilts. The argument dies uglier than it started.",
       do: "The room takes that and answers it, not the script."
     },
     prologue: {
@@ -673,6 +675,7 @@
       here: "The Low Quay takes your names. Stew is already on.",
       again: "You sit with it once more. The river does not mind the telling.",
       steel: "Steel stays sheathed. Three days of toasts do not start with a draw.",
+      argue: "You put yourself between two raised voices. The quay goes quiet. The badges suddenly feel visible.",
       do: "The quay files that under the night and keeps the lamps lit."
     },
     inn: {
@@ -684,12 +687,14 @@
       back: "The back table has a lamp, a wall, and a clean view of the door.",
       stand: "You keep your boots. The room fills. Nobody asks you to sit.",
       steel: "Mara does not raise her voice. “Not in my house.” The badges suddenly feel new.",
+      argue: "You step between the two voices. Hands stay off hilts. Mara’s rag slaps the oak. “Not in my house.” The argument dies.",
       do: "The Low Quay files that under the night and keeps pouring."
     },
     quay: {
       talk: "Sera’s glance says keep it short. Dawn is already late.",
       look: "Poles, pitch, Durne’s count. The crate is still the loudest thing.",
       listen: "Two voices over a crate. The hall can wait a breath.",
+      argue: "You put yourself between the crate and the two voices. Poles still. The barge-hands look at the badges.",
       leave: "You let the barge-hands keep their crate. The quay goes on.",
       steel: "Durne’s eyes find your hand. Extra coin this week. Extra enemies.",
       do: "The river does not pause for it. The banners still go up."

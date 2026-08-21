@@ -200,14 +200,14 @@
     return (sc && sc.ambient) || "inn";
   }
   function unlockStageAudio() {
-    if (!isDM() || !NB.audio) return;
+    if (!NB.audio) return;
     try { NB.audio.unlock(); } catch (e) {}
     syncStageAudio();
     maybeSpeakCaption();
   }
   function syncStageAudio() {
     if (!NB.audio) return;
-    if (!isDM() || !atTable()) {
+    if (!atTable()) {
       try { NB.audio.stopAll(); } catch (e) {}
       return;
     }
@@ -222,7 +222,7 @@
     return b.speakerId || null;
   }
   function maybeSpeakCaption() {
-    if (!isDM() || !sess.voice) return;
+    if (!sess.voice) return;
     if (!NB.audio || !NB.audio.speakLine) return;
     if (!NB.audio.isUnlocked()) return;
     var full = currentLine();
@@ -557,7 +557,7 @@
     });
     if (best) return best;
     var text = winningText(d);
-    if (text) {
+    if (text && !isCustomText(text, d.choices)) {
       var matched = matchChoice(text, d.choices);
       if (matched) return matched;
       var rule = intentRule(text, S.sceneId);
@@ -565,12 +565,19 @@
     }
     return (list[0] && list[0].choice) || "";
   }
+  function isCustomText(text, choices) {
+    var t = String(text || "").trim();
+    if (!t) return false;
+    var m = matchChoice(t, choices);
+    if (!m) return true;
+    return foldText(t).length > foldText(m).length + 10;
+  }
   function pickAftermath(d) {
     d = d || S.decision;
     if (!d) return "";
     var map = d.after || {};
     var choice = winningChoice(d);
-    if (choice && map[choice]) return map[choice];
+    if (choice && map[choice] && !isCustomText(winningText(d), d.choices)) return map[choice];
     if (map["*"]) return map["*"];
     var text = winningText(d);
     if (text) {
@@ -892,6 +899,10 @@
     var closer = d.closer || "";
     var choice = winningChoice(d);
     var nextId = (d.choiceNext && choice && d.choiceNext[choice]) || d.nextScene || null;
+    if (said.length && isCustomText(winningText(d), d.choices) && nextId) {
+      S.pendingNextScene = nextId;
+      nextId = null;
+    }
     rememberStory(said);
     S.resolvedDecisions = S.resolvedDecisions || [];
     if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
