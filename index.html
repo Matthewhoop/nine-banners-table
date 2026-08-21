@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0c1210">
   <meta name="mobile-web-app-capable" content="yes">
   <title>Nine Banners · The Table</title>
-  <link rel="stylesheet" href="css/table.css?v=20260821e">
+  <link rel="stylesheet" href="css/table.css?v=20260821g">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect fill='%230c1210' width='16' height='16'/%3E%3Crect fill='%23c9a15b' x='2' y='3' width='2' height='8'/%3E%3Crect fill='%232a6b6b' x='5' y='3' width='2' height='8'/%3E%3Crect fill='%238b3a2a' x='8' y='3' width='2' height='8'/%3E%3Crect fill='%23d4b46a' x='11' y='3' width='2' height='8'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -20,7 +20,7 @@
       <div class="join-card">
         <p class="eyebrow">Pellane · three days · a river truce</p>
         <h1>The Accord of<br>Nine Banners</h1>
-        <p class="join-lede">The table is already being run — sit down and play. You are envoy Sera Vell’s blades. Keep her alive. Keep her seal off other people’s wax. Smile through three days of toasts.</p>
+        <p class="join-lede">Phones sit as blades and send choices. The laptop shows the story.</p>
         <form id="form-player" class="join-form" autocomplete="off">
           <label>Your name at the table
             <input id="input-name" type="text" maxlength="24" placeholder="e.g. Kade" autocapitalize="words">
@@ -33,7 +33,7 @@
             <button type="button" class="btn ink" id="btn-fresh">Start fresh</button>
           </div>
         </form>
-        <button type="button" class="btn slim join-dm" id="btn-open-dm">Open as DM</button>
+        <button type="button" class="btn slim join-dm" id="btn-open-dm">Open the table</button>
         <form id="form-dm" class="join-form join-dm-form hidden" autocomplete="off">
           <label>Table PIN
             <input id="input-pin" type="text" inputmode="text" maxlength="16" value="9BANNERS" autocapitalize="characters">
@@ -44,7 +44,7 @@
             <button type="button" class="btn ink" id="btn-dm-fresh">Start fresh</button>
           </div>
         </form>
-        <p class="join-foot">Table code <strong id="join-code">9B-PELLANE</strong> · same code, same story — open it on another phone.</p>
+        <p class="join-foot">Phones choose. The laptop shows the story. Table code <strong id="join-code">9B-PELLANE</strong></p>
       </div>
     </section>
 
@@ -66,6 +66,7 @@
       <div id="panel-stage" class="panel">
         <div id="hp-strip" class="hp-strip hidden" role="region" aria-label="Party health"></div>
         <div id="live-row" class="live-row hidden" aria-label="Who is here"></div>
+        <div id="stage-roll" class="stage-roll hidden" aria-label="Last roll"></div>
         <div class="story-page" id="story-page">
           <div class="story-art" id="story-art">
             <canvas id="stage" width="240" height="160" aria-label="Illustrated scene"></canvas>
@@ -79,6 +80,8 @@
               <p class="cap-hint hidden" id="cap-hint">tap to continue</p>
             </div>
           </button>
+          <div id="pad-status" class="pad-status hidden" aria-live="polite"></div>
+          <div id="pad-talk" class="pad-talk hidden" aria-label="Who is here to talk"></div>
           <div id="decision-card" class="decision-card hidden" aria-live="polite"></div>
           <div id="end-card" class="end-card hidden" aria-live="polite"></div>
         </div>
@@ -132,8 +135,8 @@
       </div>
 
       <nav class="dock" aria-label="Table">
-        <button type="button" class="dock-btn on" data-panel="stage">Stage</button>
-        <button type="button" class="dock-btn" data-panel="party">Party</button>
+        <button type="button" class="dock-btn on" data-panel="stage">Play</button>
+        <button type="button" class="dock-btn" data-panel="party">Me</button>
         <button type="button" class="dock-btn" data-panel="people">People</button>
         <button type="button" class="dock-btn" data-panel="dice">Dice</button>
       </nav>
@@ -163,13 +166,13 @@
     <div id="fb-toast" class="fb-toast hidden" role="status">Got it. Thanks.</div>
   </div>
 
-  <script src="js/data.js?v=20260821e"></script>
-  <script src="js/coach.js?v=20260821e"></script>
-  <script src="js/pix.js?v=20260821e"></script>
-  <script src="js/state.js?v=20260821e"></script>
-  <script src="js/feedback.js?v=20260821e"></script>
+  <script src="js/data.js?v=20260821g"></script>
+  <script src="js/coach.js?v=20260821g"></script>
+  <script src="js/pix.js?v=20260821g"></script>
+  <script src="js/state.js?v=20260821g"></script>
+  <script src="js/feedback.js?v=20260821g"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="js/sync.js?v=20260821e"></script>
-  <script src="js/app.js?v=20260821e"></script>
+  <script src="js/sync.js?v=20260821g"></script>
+  <script src="js/app.js?v=20260821g"></script>
 </body>
 </html>
