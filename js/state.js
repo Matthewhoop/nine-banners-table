@@ -24,6 +24,7 @@
       decision: null,
       resolvedDecisions: [],
       talkReturn: null,
+      pendingNextScene: null,
       heardLines: {}
     };
   }

@@ -161,6 +161,8 @@
       called: !!called,
       sceneId: S.sceneId,
       after: spec.after || null,
+      nextScene: spec.nextScene || null,
+      closer: spec.closer || null,
       talk: !!spec.talk,
       npcId: spec.npcId || null,
       heardLine: spec.heardLine || null,
@@ -492,6 +494,28 @@
     persist();
     renderChrome();
   }
+  function chainedNextScene() {
+    if (S.pendingNextScene && NB.SCENES[S.pendingNextScene]) return S.pendingNextScene;
+    if (decisionOpen()) return null;
+    var sc = scene();
+    var decs = (sc && sc.decisions) || [];
+    var resolved = S.resolvedDecisions || [];
+    for (var i = 0; i < decs.length; i++) {
+      var d = decs[i];
+      if (d.nextScene && NB.SCENES[d.nextScene] && resolved.indexOf(d.id) >= 0) return d.nextScene;
+    }
+    return null;
+  }
+  function applyPendingScene() {
+    var id = chainedNextScene();
+    if (!id) {
+      S.pendingNextScene = null;
+      return false;
+    }
+    S.pendingNextScene = null;
+    applyScene(id);
+    return true;
+  }
   function resolveDecision(skipped) {
     var d = S.decision;
     if (!d) return;
@@ -501,6 +525,8 @@
     }
     var summary = skipped && !submissionList(d).length ? "" : decisionSummary(d);
     var after = skipped && !summary ? "" : pickAftermath(d);
+    var closer = d.closer || "";
+    var nextId = d.nextScene || null;
     S.resolvedDecisions = S.resolvedDecisions || [];
     if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
     S.decision = null;
@@ -509,19 +535,30 @@
     var lines = (S.beat.lines || []).slice();
     var idx = S.beat.index | 0;
     var extras = [];
-    if (summary && lines[idx] !== summary && lines[idx + 1] !== summary) extras.push(summary);
-    if (after && after !== summary && extras.indexOf(after) < 0 && lines[idx] !== after && lines[idx + 1] !== after) {
-      extras.push(after);
-    }
+    if (after && lines[idx] !== after && lines[idx + 1] !== after) extras.push(after);
+    if (closer && closer !== after && extras.indexOf(closer) < 0 && lines[idx] !== closer) extras.push(closer);
     if (!extras.length && idx >= lines.length - 1) {
       extras.push(after || summary || "The table takes that as the move.");
     }
+    if (nextId && NB.SCENES[nextId]) S.pendingNextScene = nextId;
+    else S.pendingNextScene = null;
     if (extras.length) {
       lines = lines.slice(0, idx + 1).concat(extras, lines.slice(idx + 1));
       S.beat.lines = lines;
       S.beat.speakerId = null;
-      S.beat.index = idx + extras.length;
-    } else if (idx < lines.length - 1) {
+      S.beat.index = idx + 1;
+      finishBeatReset();
+      persist();
+      renderChrome();
+      return;
+    }
+    if (nextId && NB.SCENES[nextId]) {
+      finishBeatReset();
+      persist();
+      applyPendingScene();
+      return;
+    }
+    if (idx < lines.length - 1) {
       S.beat.index = idx + 1;
     }
     finishBeatReset();
@@ -903,6 +940,7 @@
     var more = localShown < full.length || (S.beat.index | 0) < ((S.beat.lines || []).length - 1);
     var canGo = !!(decisionOpen() && (canPlayerContinue() || playerHasVoted()));
     var talkMore = !!(S.beat.followLine || S.beat.talk || S.talkReturn);
+    var sceneMore = !!chainedNextScene();
     if (localShown < full.length) {
       hint.classList.remove("hidden");
       hint.textContent = "tap to finish";
@@ -914,7 +952,7 @@
       else hint.textContent = canGo ? "tap to continue" : "a decision waits";
       return;
     }
-    if (more || talkMore) {
+    if (more || talkMore || sceneMore) {
       hint.classList.remove("hidden");
       hint.textContent = "tap to continue";
       return;
@@ -1020,6 +1058,10 @@
     }
     if (S.talkReturn || (S.beat && S.beat.talk)) {
       returnFromTalk();
+      return;
+    }
+    if (S.pendingNextScene) {
+      applyPendingScene();
     }
   }
 
@@ -1283,6 +1325,7 @@
   function closeModal() { $("modal").classList.add("hidden"); }
 
   function applyScene(id) {
+    S.pendingNextScene = null;
     S.sceneId = id;
     var sc = scene();
     S.px = sc.spawn.x;

@@ -169,13 +169,18 @@
       narration: "Stew and barge-talk. Mara behind the bar. Your badges are new. The first toast is tomorrow night.",
       beats: [
         "Stew and barge-talk. Mara behind the bar.",
-        "Your badges are new. The first toast is tomorrow night."
+        "Your badges are new. The oak already has opinions.",
+        "Aldren buys the next bottle before anyone asks.",
+        "Lir’s thumb is ink-black. He watches the door more than the bowl.",
+        "The first toast is tomorrow night. Tonight is beds and who sits where.",
+        "The room is filling. Sera wants you settled before dawn."
       ],
       decisions: [
         {
           id: "inn-settle",
           kind: "group",
-          afterBeat: 1,
+          afterBeat: 5,
+          nextScene: "quay",
           prompt: "The room is filling. Where does the table settle?",
           choices: ["Sit at the bar", "Take the back table", "Stay on your feet"],
           allowText: true,
@@ -211,14 +216,18 @@
       id: "quay", name: "Pellane Quay", art: "art/quay.png",
       narration: "The river is high and brown. Banners going up. Dawn on the fork. Sera briefs her blades before the hall opens.",
       beats: [
-        "The river is high and brown. Banners going up. Dawn on the fork.",
-        "Sera briefs her blades before the hall opens."
+        "The river is high and brown. Dawn on the fork.",
+        "Banners going up on poles that still smell like pitch.",
+        "Sera briefs her blades. Keep her seal. Keep her breathing.",
+        "Durne counts out-of-town steel and does not smile.",
+        "Two barge-hands argue over a crate. The hall can wait a breath — or not."
       ],
       decisions: [
         {
           id: "quay-overhear",
           kind: "solo",
-          afterBeat: 1,
+          afterBeat: 4,
+          nextScene: "hall",
           prompt: "Two barge-hands are arguing over a crate. Who leans in?",
           choices: ["Listen", "Walk past"],
           allowText: true,
@@ -254,13 +263,18 @@
       narration: "Day 1. Petitions. Each house reads what they want the treaty to say. The hall is open. The quay is louder.",
       beats: [
         "Day 1. Petitions. Each house reads what they want the treaty to say.",
-        "The hall is open. The quay is louder."
+        "The granary-hall used to hold grain. Now it holds nine banners.",
+        "Pava wants three quiet days. Tolla wants the barges moving.",
+        "Kell speaks of a hymn. Dreth’s banner hangs like a funeral that learned to stand.",
+        "The hall is open. The quay is louder through the doors.",
+        "The houses take their places. Someone has to stand near a color."
       ],
       decisions: [
         {
           id: "hall-banner",
           kind: "group",
-          afterBeat: 1,
+          afterBeat: 5,
+          nextScene: "bridge",
           prompt: "The houses are taking their places. Which banner do we stand near?",
           choices: ["House Vell", "House Dreth", "House Calren", "The host-lord"],
           allowText: true,
@@ -299,7 +313,26 @@
       narration: "Between the public hours: “accidental” meetings on the stones. The river talks under your boots.",
       beats: [
         "Between the public hours: “accidental” meetings on the stones.",
-        "The river talks under your boots."
+        "The river talks under your boots.",
+        "Ise Calren smiles like a clause. She has an hour to sell.",
+        "Aldren mentions a stair the banners never use, as if it were weather.",
+        "Ysolde watches the water and does not collect either offer."
+      ],
+      decisions: [
+        {
+          id: "bridge-offer",
+          kind: "group",
+          afterBeat: 4,
+          nextScene: "banquet",
+          prompt: "Two offers, one pair of boots. What does the table do?",
+          choices: ["Walk with Ise", "Hear Aldren’s stair", "Decline both"],
+          allowText: true,
+          after: {
+            "Walk with Ise": "Ise takes the long way along the rail. Warehouses, smiles, nothing that costs yet.",
+            "Hear Aldren’s stair": "Aldren points at a door the banners never use. A rumor, not a key.",
+            "Decline both": "You keep the stones and your hours. The river does not mind."
+          }
+        }
       ],
       present: ["ise", "aldren", "ysolde"],
       spawn: { x: 120, y: 100 },
@@ -325,8 +358,28 @@
       id: "banquet", name: "The Closing Banquet", art: "art/faceoff.png",
       narration: "Nine toasts. A hymn to the river. Gold, wine, and watching eyes. The draft is still a draft.",
       beats: [
-        "Nine toasts. A hymn to the river. Gold, wine, and watching eyes.",
-        "The draft is still a draft."
+        "Night 1. Gold, wine, and watching eyes.",
+        "Nine cups wait. The draft is still a draft.",
+        "Pava thanks the room for keeping steel in its sheath.",
+        "Kell’s hymn is promised for later. Not yet.",
+        "The first toast is raised. Whose cup do you watch?"
+      ],
+      decisions: [
+        {
+          id: "banquet-toast",
+          kind: "group",
+          afterBeat: 4,
+          prompt: "The first toast is raised. Whose cup do you watch?",
+          choices: ["Sera’s toast", "Pava’s toast", "Dreth’s toast", "Kell’s toast"],
+          allowText: true,
+          closer: "The hymn is still coming. Night 1 holds.",
+          after: {
+            "Sera’s toast": "Sera’s cup is brief and exact. She drinks like a woman who still has work.",
+            "Pava’s toast": "Pava toasts the city that offered a table. Gold chain, river-cold eyes.",
+            "Dreth’s toast": "Dreth drinks without a speech. The glove in his belt does the talking.",
+            "Kell’s toast": "Kell names the river and does not rush the hymn."
+          }
+        }
       ],
       present: ["pava", "sera", "aldren", "dreth", "ise", "kell", "tolla", "ysolde"],
       spawn: { x: 120, y: 118 },
@@ -354,6 +407,8 @@
       narration: "Barges, blessings, the draft carried toward the ford-shrine. Setup and hymns. After this, people go home and see if the paper holds.",
       beats: [
         "Barges, blessings, the draft carried toward the ford-shrine.",
+        "Kell’s voice carries over the water. The poles are already dressed.",
+        "Sera keeps her seal on her own finger. The barges wait.",
         "Setup and hymns. After this, people go home and see if the paper holds."
       ],
       present: ["kell", "pava", "sera", "tolla"],
@@ -381,6 +436,8 @@
       narration: "Fork city. Granaries, three bridges, a civic hall that used to be a grain store. Cousins who “just happened to be passing through.”",
       beats: [
         "Fork city. Granaries, three bridges, a civic hall that used to be a grain store.",
+        "The watch extra-coin this week. Durne does not pretend otherwise.",
+        "Mara’s door is still open if you need stew more than speeches.",
         "Cousins who “just happened to be passing through.”"
       ],
       present: ["durne", "mara"],
