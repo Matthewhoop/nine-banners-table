@@ -825,3 +825,186 @@ textarea { min-height: 88px; resize: vertical; }
 .look-pick canvas { width: 44px; height: 44px; display: block; }
 .look-pick span { font-size: 9px; color: var(--mist); margin-top: 2px; }
 .cast-strip { display: none !important; }
+
+
+/* —— House table: laptop STAGE vs phone CONTROLLER —— */
+.stage-roll {
+  flex: 0 0 auto;
+  padding: 4px 12px 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--brass);
+  background: #100c08;
+  border-bottom: 1px solid var(--line);
+}
+.stage-roll.hidden { display: none !important; }
+
+.pad-status {
+  display: none;
+  flex: 0 0 auto;
+  padding: 16px 16px 14px;
+  background: linear-gradient(180deg, #16110c, #100c08);
+  border-bottom: 1px solid var(--line);
+}
+.pad-status.hidden { display: none !important; }
+.pad-kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.pad-line {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--cream);
+}
+
+.pad-talk {
+  display: none;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #100c08;
+  border-bottom: 1px solid var(--line);
+}
+.pad-talk.hidden { display: none !important; }
+.pad-talk-btn {
+  flex: 1 1 42%;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #241c14;
+  color: var(--cream);
+  font-weight: 650;
+  text-align: left;
+}
+.pad-talk-btn.on { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass-dim); }
+.pad-talk-btn small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist);
+  font-weight: 550;
+}
+
+body.is-stage {
+  --dock-h: 0;
+}
+body.is-stage .dock,
+body.is-stage #btn-role,
+body.is-stage #dm-stage-tools,
+body.is-stage #fo-cmds,
+body.is-stage #pad-status,
+body.is-stage #pad-talk {
+  display: none !important;
+}
+body.is-stage #btn-feedback {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+body.is-stage #panel-stage {
+  flex: 1;
+  min-height: 0;
+}
+body.is-stage .story-art {
+  flex: 1 1 auto;
+  min-height: 220px;
+}
+body.is-stage .story-caption {
+  min-height: 128px;
+}
+body.is-stage .decision-card {
+  max-height: 30vh;
+}
+body.is-stage .dec-theater .dec-status {
+  color: var(--cream);
+}
+
+body.is-controller #story-art {
+  display: none !important;
+}
+body.is-controller .story-caption {
+  display: none !important;
+}
+body.is-controller #stage-roll,
+body.is-controller #live-row,
+body.is-controller #end-card {
+  display: none !important;
+}
+body.is-controller #pad-status:not(.hidden) {
+  display: block;
+}
+body.is-controller .story-page:not(.has-decision):not(.faceoff) #pad-status:not(.hidden) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 160px;
+  padding: 28px 18px;
+}
+body.is-controller .pad-line { font-size: 18px; }
+body.is-controller #pad-talk:not(.hidden) {
+  display: flex;
+}
+body.is-controller .decision-card {
+  flex: 1 1 auto;
+  max-height: none;
+}
+body.is-controller .story-page.has-decision .decision-card {
+  flex: 1 1 auto;
+  max-height: none;
+}
+body.is-controller .dec-choices button,
+body.is-controller .dec-reacts button,
+body.is-controller .dec-actions .btn,
+body.is-controller #dec-send {
+  min-height: 52px;
+}
+body.is-controller .dec-field textarea {
+  min-height: 88px;
+}
+body.is-controller .hp-strip {
+  padding: 4px 8px 5px;
+}
+body.is-controller .hp-chip {
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
+}
+body.is-controller .dock {
+  grid-template-columns: repeat(3, 1fr);
+}
+body.is-controller .dock-btn[data-panel="people"] {
+  display: none;
+}
+
+@media (min-width: 720px) {
+  body.is-stage #view-table {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+  body.is-stage .story-art {
+    flex: 1 1 auto;
+    min-height: 42vh;
+  }
+  body.is-stage .story-caption {
+    min-height: 148px;
+    padding: 16px 22px 18px;
+  }
+  body.is-stage .cap-nar {
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  body.is-stage .cap-loc { font-size: 17px; }
+  body.is-stage .decision-card {
+    max-height: 28vh;
+  }
+  body.is-stage .hp-chip { min-width: 160px; }
+}
