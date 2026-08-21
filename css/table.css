@@ -514,6 +514,12 @@ textarea { min-height: 88px; resize: vertical; }
   background: #3a2c1c;
 }
 .dec-choices button:active, .dec-reacts button:active { background: #3a2c1c; }
+.dec-ends { grid-template-columns: 1fr; }
+.dec-ends button {
+  min-height: 42px;
+  font-weight: 600;
+  color: var(--paper);
+}
 .dec-field { display: grid; gap: 6px; margin: 0 0 10px; }
 .dec-field label, .dec-label {
   font-size: 12px;
