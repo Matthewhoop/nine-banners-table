@@ -10,7 +10,7 @@
       version: 1,
       pin: NB.DEFAULT_PIN,
       tableCode: NB.TABLE_CODE,
-      sceneId: "inn",
+      sceneId: "prologue",
       stageMode: "story",
       faceoff: null,
       party: [],

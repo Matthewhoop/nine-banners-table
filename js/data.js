@@ -164,8 +164,63 @@
   // fix ise color if I typo'd
 
   NB.SCENES = {
+    prologue: {
+      id: "prologue", name: "How you got here", art: "art/quay.png",
+      ambient: "quay",
+      narration: "Pellane. A river city. Nine houses. Banners going up for a three-day truce.",
+      beats: [
+        "Pellane sits on the fork: a river city, granaries, nine houses and their banners.",
+        "The war was hard. Then the houses asked for three quiet days on the water.",
+        { speakerId: "pava", text: "House Rell will host. A river truce. Three days. A paper we can nail to the granary door." },
+        { speakerId: "sera", text: "I hired you as neutral blades. Keep me breathing. Keep my seal off other people’s wax." },
+        { speakerId: "sera", text: "Smile through three days of toasts. You are the reason I can turn my back on a room." },
+        "Mara Quell keeps the Low Quay. Aldren Vell is Sera’s uncle — charming, first to buy the next bottle.",
+        "Lir clerks the hall. Halden Dreth comes upriver, polite and hard. Ise Calren counts coin. Tolla of Meren wants the barges moving.",
+        "Speaker Kell speaks for the river-priests. Ysolde Thane is timber. Adept Corin Ivola catalogues for the scholars. Watch-Captain Durne walks the stones.",
+        { speakerId: "mara", text: "Stew first. Politics after you pay for the bottle that comes with it." },
+        "You come up the Low Quay the night before the first toast. The lamps are lit."
+      ],
+      decisions: [
+        {
+          id: "prologue-arrive",
+          kind: "group",
+          afterBeat: 9,
+          nextScene: "inn",
+          choiceNext: {
+            "We're here": "inn",
+            "Tell it once more": "prologue"
+          },
+          prompt: "The Low Quay is lit. Sit down and take the contract.",
+          choices: ["We're here", "Tell it once more"],
+          allowText: true,
+          after: {
+            "We're here": "The Low Quay takes your names. Stew is already on.",
+            "Tell it once more": "You sit with it once more. The river does not mind the telling."
+          }
+        }
+      ],
+      present: ["sera", "mara"],
+      spawn: { x: 120, y: 100 },
+      npcs: [
+        { id: "sera", x: 96, y: 86 },
+        { id: "mara", x: 150, y: 110 }
+      ],
+      map: [
+        "###############",
+        "####.......####",
+        "###.........###",
+        "##...........##",
+        "#.............#",
+        "#.............#",
+        "##...........##",
+        "###.........###",
+        "####.......####",
+        "###############"
+      ]
+    },
     inn: {
       id: "inn", name: "The Low Quay", art: "art/inn.png",
+      ambient: "inn",
       narration: "Stew and barge-talk. Mara behind the bar. Your badges are new. The first toast is tomorrow night.",
       beats: [
         "Stew and barge-talk. Mara behind the bar.",
@@ -214,6 +269,7 @@
     },
     quay: {
       id: "quay", name: "Pellane Quay", art: "art/quay.png",
+      ambient: "quay",
       narration: "The river is high and brown. Banners going up. Dawn on the fork. Sera briefs her blades before the hall opens.",
       beats: [
         "The river is high and brown. Dawn on the fork.",
@@ -260,6 +316,7 @@
     },
     hall: {
       id: "hall", name: "Granary-Hall", art: "art/hall.png",
+      ambient: "hall",
       narration: "Day 1. Petitions. Each house reads what they want the treaty to say. The hall is open. The quay is louder.",
       beats: [
         "Day 1. Petitions. Each house reads what they want the treaty to say.",
@@ -310,6 +367,7 @@
     },
     bridge: {
       id: "bridge", name: "The Side-Deal Bridge", art: null,
+      ambient: "quay",
       narration: "Between the public hours: “accidental” meetings on the stones. The river talks under your boots.",
       beats: [
         "Between the public hours: “accidental” meetings on the stones.",
@@ -356,6 +414,7 @@
     },
     banquet: {
       id: "banquet", name: "The Closing Banquet", art: "art/faceoff.png",
+      ambient: "hall",
       narration: "Nine toasts. A hymn to the river. Gold, wine, and watching eyes. The draft is still a draft.",
       beats: [
         "Night 1. Gold, wine, and watching eyes.",
@@ -409,6 +468,7 @@
     },
     procession: {
       id: "procession", name: "River Procession", art: "art/quay.png",
+      ambient: "quay",
       narration: "Barges, blessings, the draft carried toward the ford-shrine. Setup and hymns. After this, people go home and see if the paper holds.",
       beats: [
         "Barges, blessings, the draft carried toward the ford-shrine.",
@@ -438,6 +498,7 @@
     },
     pellane: {
       id: "pellane", name: "Pellane", art: "art/quay.png",
+      ambient: "quay",
       narration: "Fork city. Granaries, three bridges, a civic hall that used to be a grain store. Cousins who “just happened to be passing through.”",
       beats: [
         "Fork city. Granaries, three bridges, a civic hall that used to be a grain store.",
@@ -466,7 +527,7 @@
     }
   };
 
-  NB.SCENE_ORDER = ["inn", "quay", "hall", "bridge", "banquet", "procession", "pellane"];
+  NB.SCENE_ORDER = ["prologue", "inn", "quay", "hall", "bridge", "banquet", "procession", "pellane"];
 
   NB.FACEOFF_KINDS = [
     { id: "talk", label: "Confrontation", sub: "Someone is waiting across the stones. Keep your voice even." },
@@ -509,6 +570,10 @@
 
   /* Generic, player-safe. No identities, no twists. */
   NB.TALK_SCENE_REPLIES = {
+    prologue: [
+      { intent: "here", choice: "We're here", keys: ["here", "sit", "contract", "ready", "arrived"] },
+      { intent: "again", choice: "Tell it once more", keys: ["again", "once more", "repeat", "tell it"] }
+    ],
     inn: [
       "Stew's hot. Sit or don't.",
       "The river brings all kinds. I don't ask.",
@@ -596,6 +661,19 @@
       leave: "You give the room your back. It keeps talking.",
       steel: "Steel is a last language. You keep it sheathed. The room still saw the thought.",
       do: "The room takes that and answers it, not the script."
+    },
+    prologue: {
+      talk: "The river city hears you. The contract does not change.",
+      look: "Lamps on the Low Quay. Banners furled for the night. The first toast is still tomorrow.",
+      listen: "Water under the piles. A bottle set down. Someone laughing two doors up.",
+      help: "You take the job as it was said: keep her breathing, keep the seal hers.",
+      buy: "Coin for stew. Mara will remember the badges later.",
+      wait: "You hold on the quay. The night does not mind.",
+      leave: "You came here for three days. The oak is still waiting.",
+      here: "The Low Quay takes your names. Stew is already on.",
+      again: "You sit with it once more. The river does not mind the telling.",
+      steel: "Steel stays sheathed. Three days of toasts do not start with a draw.",
+      do: "The quay files that under the night and keeps the lamps lit."
     },
     inn: {
       talk: "Mara’s rag pauses. Aldren smiles like he was already listening.",

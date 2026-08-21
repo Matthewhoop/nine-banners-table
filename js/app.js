@@ -2,6 +2,9 @@
 (function () {
   var S = NB.loadState();
   var sess = NB.loadSession() || { role: null, name: "", pin: "", lookId: "teal" };
+  if (sess.autoPlay == null) sess.autoPlay = false;
+  if (sess.voice == null) sess.voice = true;
+  if (sess.sound == null) sess.sound = true;
   var selectedLook = (sess && sess.lookId) || "teal";
   var actorHits = [];
   var panel = "stage";
@@ -10,6 +13,7 @@
   var typeAcc = 0;
   var autoHold = 0;
   var AUTO_ADVANCE_MS = 2500;
+  var AUTO_AFTER_VOICE_MS = 900;
   var lastBeatSig = "";
   var decDraft = { id: "", text: "", choice: "" };
   var canvas, ctx;
@@ -155,17 +159,87 @@
     el.textContent = bits.join(" · ");
   }
 
-  function sceneBeats(sc) {
-    if (sc && sc.beats && sc.beats.length) return sc.beats.slice();
-    return [(sc && sc.narration) || ""];
+  function lineText(line) {
+    if (line && typeof line === "object") return String(line.text || line.line || "");
+    return String(line || "");
+  }
+  function sceneBeatParts(sc) {
+    sc = sc || scene();
+    var raw = (sc && sc.beats && sc.beats.length) ? sc.beats : [(sc && sc.narration) || ""];
+    var lines = [];
+    var speakers = [];
+    raw.forEach(function (b) {
+      if (b && typeof b === "object") {
+        lines.push(lineText(b));
+        speakers.push(b.speakerId || b.speaker || null);
+      } else {
+        lines.push(String(b || ""));
+        speakers.push(null);
+      }
+    });
+    return { lines: lines, speakers: speakers };
+  }
+  function sceneBeats(sc) { return sceneBeatParts(sc).lines; }
+  function startSceneBeat(sc, extraLines, hold) {
+    var parts = sceneBeatParts(sc || scene());
+    extraLines = extraLines || [];
+    setBeat({
+      speakerId: null,
+      lines: extraLines.concat(parts.lines),
+      speakers: extraLines.map(function () { return null; }).concat(parts.speakers),
+      index: 0,
+      holdThrough: hold | 0
+    }, true);
+  }
+  function isFreshSceneId(id) {
+    return !id || id === "inn" || id === "prologue";
+  }
+  function sceneAmbientId() {
+    if (isFaceoff()) return "faceoff";
+    var sc = scene();
+    return (sc && sc.ambient) || "inn";
+  }
+  function unlockStageAudio() {
+    if (!isDM() || !NB.audio) return;
+    try { NB.audio.unlock(); } catch (e) {}
+    syncStageAudio();
+    maybeSpeakCaption();
+  }
+  function syncStageAudio() {
+    if (!NB.audio) return;
+    if (!isDM() || !atTable()) {
+      try { NB.audio.stopAll(); } catch (e) {}
+      return;
+    }
+    if (sess.sound && NB.audio.isUnlocked()) NB.audio.setAmbient(sceneAmbientId());
+    else NB.audio.setAmbient(null);
+    if (!sess.voice && NB.audio.cancelVoice) NB.audio.cancelVoice();
+  }
+  function currentSpeakerId() {
+    var b = S.beat || {};
+    var i = b.index | 0;
+    if (b.speakers && b.speakers[i]) return b.speakers[i];
+    return b.speakerId || null;
+  }
+  function maybeSpeakCaption() {
+    if (!isDM() || !sess.voice) return;
+    if (!NB.audio || !NB.audio.speakLine) return;
+    if (!NB.audio.isUnlocked()) return;
+    var full = currentLine();
+    if (!full || localShown < full.length) return;
+    NB.audio.speakLine(full, currentSpeakerId());
+  }
+  function persistSess() {
+    NB.saveSession(sess);
   }
 
   function beatSig(b) {
     b = b || S.beat || {};
-    return String(b.speakerId || "") + "|" + (b.index || 0) + "|" + ((b.lines || []).join("\n"));
+    return String(b.speakerId || "") + "|" + (b.index || 0) + "|" + ((b.lines || []).map(lineText).join("\n"));
   }
 
   function setBeat(beat, resetType) {
+    if (NB.audio && NB.audio.cancelVoice) NB.audio.cancelVoice();
     S.beat = beat;
     lastBeatSig = beatSig(beat);
     if (resetType !== false) {
@@ -177,7 +251,7 @@
 
   function ensureBeat() {
     if (!S.beat || !S.beat.lines || !S.beat.lines.length) {
-      setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
+      startSceneBeat(scene(), [], 0);
     }
   }
 
@@ -185,7 +259,7 @@
     ensureBeat();
     var lines = S.beat.lines || [];
     var i = Math.max(0, Math.min(lines.length - 1, S.beat.index | 0));
-    return lines[i] || "";
+    return lineText(lines[i]);
   }
 
   function myKey() {
@@ -301,6 +375,7 @@
       sceneId: S.sceneId,
       after: spec.after || null,
       nextScene: spec.nextScene || null,
+      choiceNext: spec.choiceNext || null,
       closer: spec.closer || null,
       endCard: spec.endCard || null,
       talk: !!spec.talk,
@@ -318,7 +393,7 @@
   function currentAuthoredIndex() {
     if (!S.beat || S.beat.speakerId) return -1;
     var authored = authoredLines();
-    var line = (S.beat.lines || [])[S.beat.index | 0];
+    var line = lineText((S.beat.lines || [])[S.beat.index | 0]);
     if (!line) return -1;
     return authored.indexOf(line);
   }
@@ -401,7 +476,8 @@
       talk: !!b.talk,
       followId: b.followId || null,
       followLine: b.followLine || null,
-      holdThrough: b.holdThrough | 0
+      holdThrough: b.holdThrough | 0,
+      speakers: (b.speakers || []).slice()
     };
   }
   function cloneDecision(d) {
@@ -535,7 +611,7 @@
   function talkSceneKey() {
     var id = S.sceneId;
     if (id === "inn" || id === "pellane") return "inn";
-    if (id === "quay" || id === "procession") return "quay";
+    if (id === "quay" || id === "procession" || id === "prologue" || id === "bridge") return "quay";
     return "hall";
   }
   function talkSceneReplies() {
@@ -651,6 +727,7 @@
     return playerHasVoted() || groupVoteCount() > 0;
   }
   function finishBeatReset() {
+    if (NB.audio && NB.audio.cancelVoice) NB.audio.cancelVoice();
     lastBeatSig = beatSig();
     localShown = reduceMotion ? 9999 : 0;
     typeAcc = 0;
@@ -665,7 +742,7 @@
         S.decision = ret.decision;
       }
     } else {
-      setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
+      startSceneBeat(scene(), [], 0);
     }
     persist();
     renderChrome();
@@ -813,7 +890,8 @@
     var summary = skipped && !submissionList(d).length ? "" : decisionSummary(d);
     var after = skipped && !summary ? "" : pickAftermath(d);
     var closer = d.closer || "";
-    var nextId = d.nextScene || null;
+    var choice = winningChoice(d);
+    var nextId = (d.choiceNext && choice && d.choiceNext[choice]) || d.nextScene || null;
     rememberStory(said);
     S.resolvedDecisions = S.resolvedDecisions || [];
     if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
@@ -821,17 +899,20 @@
     if (summary) S.lastAction = summary;
     if (nextId && NB.SCENES[nextId]) {
       S.pendingNextScene = null;
-      applyScene(nextId);
       var open = [];
       said.forEach(function (line) { if (open.indexOf(line) < 0) open.push(line); });
+      if (nextId === S.sceneId) {
+        S.resolvedDecisions = (S.resolvedDecisions || []).filter(function (rid) { return rid !== d.id; });
+        startSceneBeat(scene(), open, said.length ? open.length : 0);
+        persist();
+        renderChrome();
+        return;
+      }
       if (after && open.indexOf(after) < 0) open.push(after);
       if (closer && closer !== after && open.indexOf(closer) < 0) open.push(closer);
+      applyScene(nextId);
       if (open.length) {
-        S.beat.lines = open.concat(sceneBeats(scene()));
-        S.beat.index = 0;
-        S.beat.speakerId = null;
-        S.beat.holdThrough = said.length ? open.length : 0;
-        finishBeatReset();
+        startSceneBeat(scene(), open, said.length ? open.length : 0);
         persist();
         renderChrome();
       }
@@ -864,8 +945,12 @@
       extras.push(after || summary || "The room waits on a clearer move.");
     }
     if (extras.length) {
+      var speakers = (S.beat.speakers || []).slice();
+      while (speakers.length < lines.length) speakers.push(null);
+      speakers = speakers.slice(0, idx + 1).concat(extras.map(function () { return null; }), speakers.slice(idx + 1));
       lines = lines.slice(0, idx + 1).concat(extras, lines.slice(idx + 1));
       S.beat.lines = lines;
+      S.beat.speakers = speakers;
       S.beat.speakerId = null;
       S.beat.index = idx + 1;
       S.beat.holdThrough = said.length ? (idx + 1 + extras.length) : 0;
@@ -1124,6 +1209,7 @@
   }
 
   function showJoin() {
+    if (NB.audio && NB.audio.stopAll) NB.audio.stopAll();
     $("view-join").classList.remove("hidden");
     $("view-table").classList.add("hidden");
     var name = $("input-name");
@@ -1143,7 +1229,7 @@
     if (S.pendingNextScene) return false;
     if (S.talkReturn) return false;
     if (S.endCard) return false;
-    if (S.sceneId && S.sceneId !== "inn") return false;
+    if (S.sceneId && !isFreshSceneId(S.sceneId)) return false;
     if (S.beat) {
       if ((S.beat.index | 0) > 0) return false;
       if (S.beat.speakerId || S.beat.talk) return false;
@@ -1163,7 +1249,7 @@
 
   function leftoverTable() {
     if (S.started) return true;
-    if (S.sceneId && S.sceneId !== "inn") return true;
+    if (S.sceneId && !isFreshSceneId(S.sceneId)) return true;
     return !tableIdle();
   }
 
@@ -1236,7 +1322,7 @@
 
   function startDay1() {
     S.started = true;
-    S.sceneId = "inn";
+    S.sceneId = "prologue";
     S.stageMode = "story";
     S.faceoff = null;
     S.lastAction = "";
@@ -1245,7 +1331,7 @@
     S.pendingNextScene = null;
     S.resolvedDecisions = [];
     S.endCard = null;
-    setBeat({ speakerId: null, lines: sceneBeats(NB.SCENES.inn), index: 0 }, true);
+    startSceneBeat(NB.SCENES.prologue || scene(), [], 0);
   }
 
   function enterTable() {
@@ -1278,6 +1364,7 @@
     renderChrome();
     renderPanel();
     fitCanvas();
+    syncStageAudio();
   }
 
   function parseQuery() {
@@ -1302,7 +1389,28 @@
       S.faceoff = null;
       S.decision = null;
       S.talkReturn = null;
-      setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
+      startSceneBeat(scene(), [], 0);
+    }
+  }
+
+  function paintStageChips() {
+    var auto = $("btn-auto");
+    var voice = $("btn-voice");
+    var sound = $("btn-sound");
+    if (auto) {
+      auto.textContent = sess.autoPlay ? "Auto" : "Tap";
+      auto.classList.toggle("on", !!sess.autoPlay);
+      auto.setAttribute("aria-pressed", sess.autoPlay ? "true" : "false");
+    }
+    if (voice) {
+      voice.textContent = "Voice";
+      voice.classList.toggle("on", !!sess.voice);
+      voice.setAttribute("aria-pressed", sess.voice ? "true" : "false");
+    }
+    if (sound) {
+      sound.textContent = "Sound";
+      sound.classList.toggle("on", !!sess.sound);
+      sound.setAttribute("aria-pressed", sess.sound ? "true" : "false");
     }
   }
 
@@ -1321,6 +1429,7 @@
       liveEl.classList.toggle("live", !!on);
     }
     $("btn-role").textContent = isDM() ? "the table" : "Player";
+    paintStageChips();
     $("dm-stage-tools").classList.add("hidden");
     $("btn-add-pc").classList.add("hidden");
     $("party-lede").textContent = isDM() ? "Every blade at the table." : "Your contract. Your blood.";
@@ -1443,7 +1552,12 @@
     }
     if (more || talkMore || sceneMore) {
       hint.classList.remove("hidden");
-      hint.textContent = "tap to continue";
+      hint.textContent = sess.autoPlay ? "auto" : "tap to continue";
+      return;
+    }
+    if (sess.autoPlay) {
+      hint.classList.add("hidden");
+      hint.textContent = "auto";
       return;
     }
     hint.classList.add("hidden");
@@ -1499,7 +1613,7 @@
   function renderCaption() {
     ensureBeat();
     var sc = scene();
-    var n = S.beat.speakerId && NB.NPCS[S.beat.speakerId];
+    var n = currentSpeakerId() && NB.NPCS[currentSpeakerId()];
     var loc = $("cap-loc");
     var spk = $("cap-speaker");
     var bust = $("cap-bust");
@@ -1519,6 +1633,7 @@
     $("cap-nar").textContent = full.slice(0, localShown);
     paintCaptionHint();
     renderPadStatus();
+    if (localShown >= full.length) maybeSpeakCaption();
   }
 
   function renderStageRoll() {
@@ -1634,13 +1749,22 @@
     return !!(sess.role && v && !v.classList.contains("hidden"));
   }
 
+  function autoAdvanceDelay() {
+    if (isDM() && sess.voice && NB.audio && NB.audio.justFinishedVoice && NB.audio.justFinishedVoice()) {
+      return AUTO_AFTER_VOICE_MS;
+    }
+    return AUTO_ADVANCE_MS;
+  }
   function canAutoAdvance() {
+    if (!sess.autoPlay) return false;
+    if (!isDM()) return false;
     if (!atTable()) return false;
     if (isFaceoff()) return false;
     if (decisionOpen()) return false;
     if (!S.beat || !(S.beat.lines || []).length) return false;
     var full = currentLine();
     if (localShown < full.length) return false;
+    if (isDM() && sess.voice && NB.audio && NB.audio.isUnlocked() && !NB.audio.voiceDone()) return false;
     if ((S.beat.holdThrough | 0) > 0 && (S.beat.index | 0) < (S.beat.holdThrough | 0)) return false;
     if ((S.beat.index | 0) < ((S.beat.lines || []).length - 1)) return true;
     if (S.beat.followLine) return true;
@@ -1652,6 +1776,7 @@
   function advanceStory() {
     ensureBeat();
     if (decisionOpen() || isFaceoff()) return false;
+    if (NB.audio && NB.audio.cancelVoice) NB.audio.cancelVoice();
     autoHold = 0;
     if ((S.beat.index | 0) < (S.beat.lines || []).length - 1) {
       S.beat.index = (S.beat.index | 0) + 1;
@@ -1686,6 +1811,7 @@
   }
 
   function tapCaption() {
+    unlockStageAudio();
     ensureBeat();
     var full = currentLine();
     if (localShown < full.length) {
@@ -1863,9 +1989,10 @@
     S.faceoff = null;
     S.lastAction = "";
     S.talkReturn = null;
-    setBeat({ speakerId: null, lines: sceneBeats(scene()), index: 0 }, true);
+    startSceneBeat(scene(), [], 0);
     persist();
     renderChrome();
+    syncStageAudio();
   }
 
   function faceoffCmd(cmd) {
@@ -1991,14 +2118,17 @@
         if (el) el.textContent = full.slice(0, localShown);
         paintCaptionHint();
         autoHold = 0;
-      } else if (canAutoAdvance()) {
-        autoHold += dt;
-        if (autoHold >= AUTO_ADVANCE_MS) {
-          autoHold = 0;
-          advanceStory();
-        }
       } else {
-        autoHold = 0;
+        maybeSpeakCaption();
+        if (canAutoAdvance()) {
+          autoHold += dt;
+          if (autoHold >= autoAdvanceDelay()) {
+            autoHold = 0;
+            advanceStory();
+          }
+        } else {
+          autoHold = 0;
+        }
       }
     }
     draw();
@@ -2028,9 +2158,10 @@
     S.resolvedDecisions = (S.resolvedDecisions || []).filter(function (rid) {
       return scDecIds.indexOf(rid) < 0;
     });
-    setBeat({ speakerId: null, lines: sceneBeats(sc), index: 0 }, true);
+    startSceneBeat(sc, [], 0);
     persist();
     renderChrome();
+    syncStageAudio();
   }
 
   function openScenes() {
@@ -2080,6 +2211,7 @@
         persist();
         closeModal();
         renderChrome();
+        syncStageAudio();
       });
     });
     $("modal-card").querySelector("[data-close]").addEventListener("click", closeModal);
@@ -2233,6 +2365,7 @@
       NB.saveSession(sess);
       renderChrome();
       renderPanel();
+      syncStageAudio();
       return;
     }
     openModal(
@@ -2252,6 +2385,7 @@
       closeModal();
       renderChrome();
       renderPanel();
+      syncStageAudio();
     });
     $("modal-card").querySelector("[data-close]").addEventListener("click", closeModal);
   }
@@ -2329,6 +2463,42 @@
         return;
       }
       if (ev.target.closest("[data-pc], [data-open-party]")) setPanel("party");
+    });
+    function bindStageChip(id, fn) {
+      var el = $(id);
+      if (!el) return;
+      el.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        fn();
+      });
+    }
+    bindStageChip("btn-auto", function () {
+      sess.autoPlay = !sess.autoPlay;
+      persistSess();
+      unlockStageAudio();
+      autoHold = 0;
+      paintStageChips();
+      paintCaptionHint();
+    });
+    bindStageChip("btn-voice", function () {
+      sess.voice = !sess.voice;
+      persistSess();
+      if (sess.voice) {
+        unlockStageAudio();
+        maybeSpeakCaption();
+      } else if (NB.audio && NB.audio.cancelVoice) {
+        NB.audio.cancelVoice();
+      }
+      paintStageChips();
+    });
+    bindStageChip("btn-sound", function () {
+      sess.sound = !sess.sound;
+      persistSess();
+      if (sess.sound) unlockStageAudio();
+      else if (NB.audio) NB.audio.setAmbient(null);
+      paintStageChips();
+      syncStageAudio();
     });
     $("story-caption").addEventListener("click", tapCaption);
     $("story-art").addEventListener("click", function (ev) {
@@ -2417,6 +2587,7 @@
       return;
     }
     if (beatSig() !== lastBeatSig) {
+      if (NB.audio && NB.audio.cancelVoice) NB.audio.cancelVoice();
       localShown = reduceMotion ? 9999 : 0;
       typeAcc = 0;
       autoHold = 0;
@@ -2424,6 +2595,7 @@
     }
     renderChrome();
     renderPanel();
+    syncStageAudio();
   }
 
   NB.afterSave = function () {
