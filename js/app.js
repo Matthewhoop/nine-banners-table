@@ -41,7 +41,9 @@
   }
 
   function visibleParty() {
-    return S.party || [];
+    if (isDM()) return S.party || [];
+    var me = myPc();
+    return me ? [me] : [];
   }
 
   function playerLook(id) {
@@ -90,6 +92,9 @@
       Object.keys(pres).forEach(function (k) {
         var e = pres[k];
         if (!e || !e.at || (Date.now() - e.at) > 40000) return;
+        var nk = String(k || e.name || "").trim().toLowerCase();
+        if (nk === "table" || nk === "dm" || nk === "guest") return;
+        if (e.seat === "stage") return;
         add({
           id: e.id || ("live-" + k),
           name: e.name || k,
@@ -99,6 +104,10 @@
         });
       });
     }
+    if (!isDM()) {
+      var mine = myPc();
+      if (mine) return out.filter(function (pc) { return pc.id === mine.id || String(pc.name).toLowerCase() === String(mine.name).toLowerCase(); });
+    }
     return out;
   }
 
@@ -107,10 +116,15 @@
     if (!el) return;
     var names = [];
     var seen = {};
+    var tableOpen = isDM();
     function addName(name) {
       var n = String(name || "").trim();
       var k = n.toLowerCase();
       if (!n || !k || seen[k] || k === "guest") return;
+      if (k === "table" || k === "dm" || k === "the table") {
+        tableOpen = true;
+        return;
+      }
       seen[k] = true;
       names.push(n);
     }
@@ -118,18 +132,26 @@
     if (pres && !Array.isArray(pres)) {
       Object.keys(pres).forEach(function (k) {
         var e = pres[k];
-        if (e && e.at && (Date.now() - e.at) <= 40000) addName(e.name || k);
+        if (!e || !e.at || (Date.now() - e.at) > 40000) return;
+        if (e.seat === "stage" || String(k).toLowerCase() === "table" || String(k).toLowerCase() === "dm") {
+          tableOpen = true;
+          return;
+        }
+        addName(e.name || k);
       });
     }
-    addName(displayName());
+    if (!isDM()) addName(displayName());
     (S.party || []).forEach(function (pc) { addName(pc.name); });
-    if (!names.length) {
+    var bits = [];
+    if (tableOpen) bits.push("the table");
+    bits = bits.concat(names);
+    if (!bits.length) {
       el.classList.add("hidden");
       el.textContent = "";
       return;
     }
     el.classList.remove("hidden");
-    el.textContent = names.join(" · ");
+    el.textContent = bits.join(" · ");
   }
 
   function sceneBeats(sc) {
@@ -166,10 +188,16 @@
   }
 
   function myKey() {
-    return String(sess.name || (isDM() ? "DM" : "guest")).trim().toLowerCase();
+    if (isDM()) return "table";
+    return String(sess.name || "guest").trim().toLowerCase();
   }
   function displayName() {
-    return (sess.name || (isDM() ? "DM" : "A blade")).trim();
+    if (isDM()) return "the table";
+    return (sess.name || "A blade").trim();
+  }
+  function applySeatClasses() {
+    document.body.classList.toggle("is-stage", isDM());
+    document.body.classList.toggle("is-controller", !isDM());
   }
   function decisionOpen() {
     return !!(S.decision && S.decision.status === "open") && !isFaceoff();
@@ -202,7 +230,7 @@
     var me = myKey();
     (S.joined || []).forEach(function (j) {
       var k = (typeof j === "string" ? j : (j.key || j.name || "")).trim().toLowerCase();
-      if (!k || k === "dm" || k === "guest") return;
+      if (!k || k === "dm" || k === "guest" || k === "table") return;
       if (k === me) { keys[k] = true; return; }
       if (typeof j === "string") return;
       var at = j.at || 0;
@@ -220,7 +248,12 @@
     var presLive = 0;
     if (pres && !Array.isArray(pres)) {
       Object.keys(pres).forEach(function (k) {
-        if (pres[k] && pres[k].at && (Date.now() - pres[k].at) <= 40000) presLive += 1;
+        var e = pres[k];
+        if (!e || !e.at || (Date.now() - e.at) > 40000) return;
+        var pk = String(k).toLowerCase();
+        if (pk === "table" || pk === "dm" || pk === "guest") return;
+        if (e.seat === "stage") return;
+        presLive += 1;
       });
     }
     var peersLive = presLive > 1 || (peerSeenAt && (Date.now() - peerSeenAt) < 30000);
@@ -366,7 +399,8 @@
       index: b.index | 0,
       talk: !!b.talk,
       followId: b.followId || null,
-      followLine: b.followLine || null
+      followLine: b.followLine || null,
+      holdThrough: b.holdThrough | 0
     };
   }
   function cloneDecision(d) {
@@ -541,6 +575,7 @@
     if (S.heardLines[id].indexOf(line) < 0) S.heardLines[id].push(line);
   }
   function upsertSubmission(role, choice, text) {
+    if (isDM()) return;
     var d = S.decision;
     if (!d) return;
     markJoined();
@@ -610,7 +645,7 @@
   }
   function canPlayerContinue() {
     if (!decisionOpen()) return false;
-    if (isDM()) return true;
+    if (isDM()) return false;
     if (S.decision.kind === "solo") return actorSubmitted() || (isActor() && playerHasVoted());
     return playerHasVoted() || groupVoteCount() > 0;
   }
@@ -670,7 +705,8 @@
         d.heardLine = heard;
         d.submissions = {};
         decDraft = { id: d.id, text: "", choice: "" };
-        setBeat({ speakerId: d.npcId, lines: [heard], index: 0, talk: true }, true);
+        var youLine = act.who ? (act.who + " — " + String(act.text).trim()) : String(act.text).trim();
+        setBeat({ speakerId: d.npcId, lines: [youLine, heard], index: 0, talk: true, holdThrough: 1 }, true);
         persist();
         renderChrome();
         return;
@@ -726,17 +762,58 @@
     applyScene(id);
     return true;
   }
+  function draftText() {
+    var ta = $("dec-text");
+    var t = (ta && ta.value) || decDraft.text || "";
+    return String(t).trim();
+  }
+  function flushDraft() {
+    if (isDM()) return;
+    var d = S.decision;
+    if (!d || d.status !== "open") return;
+    var text = draftText();
+    if (!text) return;
+    decDraft.text = text;
+    var key = myKey();
+    var prev = (d.submissions || {})[key] || {};
+    d.submissions = d.submissions || {};
+    d.submissions[key] = {
+      who: displayName(),
+      pcId: (myPc() && myPc().id) || prev.pcId || null,
+      role: prev.role || (d.kind === "solo" ? (isActor() ? "act" : "react") : "vote"),
+      choice: decDraft.choice || prev.choice || null,
+      text: text,
+      at: Date.now()
+    };
+  }
+  function playerSaidLines(d) {
+    return submissionList(d).map(function (x) {
+      var t = (x.text || "").trim();
+      if (!t) return "";
+      return (x.who ? x.who + " — " : "") + t;
+    }).filter(Boolean);
+  }
+  function rememberStory(lines) {
+    if (!lines || !lines.length) return;
+    S.storyLog = S.storyLog || [];
+    lines.forEach(function (line) {
+      S.storyLog.push({ scene: S.sceneId, line: line, at: Date.now() });
+    });
+  }
   function resolveDecision(skipped) {
+    flushDraft();
     var d = S.decision;
     if (!d) return;
     if (d.talk) {
       resolveTalk(d, skipped);
       return;
     }
+    var said = skipped ? [] : playerSaidLines(d);
     var summary = skipped && !submissionList(d).length ? "" : decisionSummary(d);
     var after = skipped && !summary ? "" : pickAftermath(d);
     var closer = d.closer || "";
     var nextId = d.nextScene || null;
+    rememberStory(said);
     S.resolvedDecisions = S.resolvedDecisions || [];
     if (d.id && S.resolvedDecisions.indexOf(d.id) < 0) S.resolvedDecisions.push(d.id);
     S.decision = null;
@@ -745,12 +822,14 @@
       S.pendingNextScene = null;
       applyScene(nextId);
       var open = [];
-      if (after) open.push(after);
-      if (closer && closer !== after) open.push(closer);
+      said.forEach(function (line) { if (open.indexOf(line) < 0) open.push(line); });
+      if (after && open.indexOf(after) < 0) open.push(after);
+      if (closer && closer !== after && open.indexOf(closer) < 0) open.push(closer);
       if (open.length) {
         S.beat.lines = open.concat(sceneBeats(scene()));
         S.beat.index = 0;
         S.beat.speakerId = null;
+        S.beat.holdThrough = said.length ? open.length : 0;
         finishBeatReset();
         persist();
         renderChrome();
@@ -775,16 +854,20 @@
     var lines = (S.beat.lines || []).slice();
     var idx = S.beat.index | 0;
     var extras = [];
-    if (after && lines[idx] !== after && lines[idx + 1] !== after) extras.push(after);
+    said.forEach(function (line) {
+      if (lines.indexOf(line) < 0 && extras.indexOf(line) < 0) extras.push(line);
+    });
+    if (after && lines[idx] !== after && lines[idx + 1] !== after && extras.indexOf(after) < 0) extras.push(after);
     if (closer && closer !== after && extras.indexOf(closer) < 0 && lines[idx] !== closer) extras.push(closer);
     if (!extras.length && idx >= lines.length - 1) {
-      extras.push(after || summary || "The table takes that as the move.");
+      extras.push(after || summary || "The room waits on a clearer move.");
     }
     if (extras.length) {
       lines = lines.slice(0, idx + 1).concat(extras, lines.slice(idx + 1));
       S.beat.lines = lines;
       S.beat.speakerId = null;
       S.beat.index = idx + 1;
+      S.beat.holdThrough = said.length ? (idx + 1 + extras.length) : 0;
       finishBeatReset();
       persist();
       renderChrome();
@@ -869,7 +952,7 @@
       });
     }
     var cont = el.querySelector("#dec-continue");
-    if (cont) cont.addEventListener("click", function () { resolveDecision(false); });
+    if (cont) cont.addEventListener("click", function () { flushDraft(); resolveDecision(false); });
     var skip = el.querySelector("#dec-skip");
     if (skip) skip.addEventListener("click", function () { resolveDecision(true); });
   }
@@ -898,6 +981,26 @@
       selStart = $("dec-text").selectionStart;
       selEnd = $("dec-text").selectionEnd;
     }
+    if (isDM()) {
+      var th = "<div class='dec-body dec-theater'>";
+      var thBadge = d.talk ? "Speak" : (d.kind === "solo" ? "One blade" : "The table");
+      var thKind = d.talk ? "talk" : d.kind;
+      th += "<div class='dec-head'><span class='dec-badge " + thKind + "'>" + thBadge + "</span>";
+      th += "<p class='dec-prompt'>" + escapeHtml(d.prompt) + "</p></div>";
+      var answered = submissionList(d);
+      if (!answered.length) {
+        th += "<p class='dec-status'>Waiting on the blades.</p>";
+      } else {
+        var who = answered.map(function (s) { return s.who; }).filter(Boolean);
+        th += "<p class='dec-status'>" + escapeHtml(who.join(" · ") || "A blade") + " answered.</p>";
+      }
+      th += tallyHtml(d);
+      th += "</div>";
+      el.innerHTML = th;
+      el.classList.remove("hidden");
+      return;
+    }
+
     var html = "<div class='dec-body'>";
     var badge = d.talk ? "Speak" : (d.kind === "solo" ? "One blade" : "The table");
     var badgeKind = d.talk ? "talk" : d.kind;
@@ -923,7 +1026,7 @@
         html += "<p class='dec-status'>No blades on the roster yet — a player can tap I do this, or add a blade on Party.</p>";
       }
     } else if (d.kind === "solo" && hasActor && iAmActor && voted && !d.talk) {
-      html += "<p class='dec-status'>You sent that. Tap Continue — or the caption — to move on.</p>";
+      html += "<p class='dec-status'>You sent that. Waiting on the table.</p>";
     } else if (d.kind === "solo" && hasActor && iAmActor) {
       html += "<p class='dec-status'>" + (d.talk ? "Keep talking — or wrap it up." : "You are acting.") + "</p>";
       if (d.choices && d.choices.length) {
@@ -960,7 +1063,7 @@
       html += "<textarea id='dec-text' maxlength='200' placeholder='I watch the door…'>" + escapeHtml(decDraft.text) + "</textarea></div>";
       html += "<div class='dec-actions'><button type='button' class='btn ink' id='dec-send'>Send react</button></div>";
     } else if (voted) {
-      html += "<p class='dec-status'>You sent that. Tap Continue — or the caption — to move on.</p>";
+      html += "<p class='dec-status'>You sent that. Waiting on the table.</p>";
     } else {
       html += "<p class='dec-status'>Everyone at the table. Pick, type, or both.</p>";
       if (d.choices && d.choices.length) {
@@ -1147,7 +1250,9 @@
   function enterTable() {
     $("view-join").classList.add("hidden");
     $("view-table").classList.remove("hidden");
+    applySeatClasses();
     NB.saveSession(sess);
+    if (typeof NB.refreshSyncRole === "function") NB.refreshSyncRole();
     if (sess.role === "player" && sess.name) {
       dedupParty();
       var mine = S.party.find(function (p) { return p.name.toLowerCase() === sess.name.toLowerCase(); });
@@ -1181,7 +1286,7 @@
       S = NB.loadState();
       try { history.replaceState({}, "", location.pathname + (location.hash || "")); } catch (e2) {}
     }
-    if (q.get("dm") === "1" || q.get("role") === "dm") {
+    if (q.get("dm") === "1" || q.get("role") === "dm" || q.get("stage") === "1" || q.get("role") === "stage") {
       sess.role = "dm";
       sess.pin = q.get("pin") || S.pin || NB.DEFAULT_PIN;
       S.pin = sess.pin;
@@ -1205,18 +1310,19 @@
     var sc = scene();
     $("top-scene").textContent = sc.name;
     $("top-code").textContent = S.tableCode;
-    $("top-role").textContent = isDM() ? "DM" : (sess.name || "player");
+    applySeatClasses();
+    $("top-role").textContent = isDM() ? "the table" : (sess.name || "player");
     var liveEl = $("top-live");
     if (liveEl) {
       var n = (typeof NB.syncLiveCount === "function") ? NB.syncLiveCount(S) : (S.party || []).length;
       var on = typeof NB.syncLinked === "function" && NB.syncLinked();
-      liveEl.textContent = on ? ("live · " + Math.max(1, n)) : "this phone";
+      liveEl.textContent = on ? ("live · " + n) : (isDM() ? "this laptop" : "this phone");
       liveEl.classList.toggle("live", !!on);
     }
-    $("btn-role").textContent = isDM() ? "DM" : "Player";
-    $("dm-stage-tools").classList.toggle("hidden", !isDM());
-    $("btn-add-pc").classList.toggle("hidden", !isDM());
-    $("party-lede").textContent = isDM() ? "Every blade at the table. Thumbs on the HP." : "Your contract. Your blood.";
+    $("btn-role").textContent = isDM() ? "the table" : "Player";
+    $("dm-stage-tools").classList.add("hidden");
+    $("btn-add-pc").classList.add("hidden");
+    $("party-lede").textContent = isDM() ? "Every blade at the table." : "Your contract. Your blood.";
     $("story-page").classList.toggle("can-continue", !!(decisionOpen() && (canPlayerContinue() || playerHasVoted())));
     $("story-page").classList.toggle("faceoff", isFaceoff());
     $("faceoff-ui").classList.toggle("hidden", !isFaceoff());
@@ -1234,6 +1340,9 @@
     renderChromeLight();
     renderHpStrip();
     paintLiveRow();
+    renderStageRoll();
+    renderPadStatus();
+    renderPadTalk();
     if (isFaceoff()) renderFaceoffUI();
     fitCanvas();
   }
@@ -1251,7 +1360,7 @@
     el.classList.remove("hidden");
     el.removeAttribute("aria-hidden");
     var me = myPc();
-    var dm = isDM();
+    var dm = false;
     el.innerHTML = pcs.map(function (pc) {
       var max = Math.max(1, pc.maxHp | 0);
       var hp = Math.max(0, pc.hp | 0);
@@ -1408,6 +1517,75 @@
     if (localShown > full.length) localShown = full.length;
     $("cap-nar").textContent = full.slice(0, localShown);
     paintCaptionHint();
+    renderPadStatus();
+  }
+
+  function renderStageRoll() {
+    var el = $("stage-roll");
+    if (!el) return;
+    var lr = S.lastRoll;
+    if (!isDM() || !lr || lr.value == null) {
+      el.classList.add("hidden");
+      el.textContent = "";
+      return;
+    }
+    var who = lr.who && String(lr.who) !== "dm" && String(lr.who) !== "table" ? lr.who : "";
+    el.classList.remove("hidden");
+    el.textContent = (who ? who + " · " : "") + lr.value + " / d" + lr.sides;
+  }
+
+  function renderPadStatus() {
+    var el = $("pad-status");
+    if (!el) return;
+    if (isDM()) {
+      el.classList.add("hidden");
+      el.innerHTML = "";
+      return;
+    }
+    el.classList.remove("hidden");
+    var line = currentLine();
+    if (decisionOpen()) {
+      var d = S.decision;
+      el.innerHTML = "<p class='pad-kicker'>The table is waiting</p><p class='pad-line'>" +
+        escapeHtml((d && d.prompt) || "A choice is open.") + "</p>";
+      return;
+    }
+    if (isFaceoff()) {
+      el.innerHTML = "<p class='pad-kicker'>Watch the table.</p><p class='pad-line'>" +
+        escapeHtml(S.lastAction || line || "A face-off is on.") + "</p>";
+      return;
+    }
+    el.innerHTML = "<p class='pad-kicker'>Watch the table.</p><p class='pad-line'>" +
+      escapeHtml(line || "The story is on the laptop.") + "</p>";
+  }
+
+  function renderPadTalk() {
+    var el = $("pad-talk");
+    if (!el) return;
+    if (isDM() || isFaceoff() || decisionOpen()) {
+      el.classList.add("hidden");
+      el.innerHTML = "";
+      return;
+    }
+    var present = (scene().present || []).filter(function (id) { return NB.NPCS[id]; });
+    if (!present.length) {
+      el.classList.add("hidden");
+      el.innerHTML = "";
+      return;
+    }
+    el.classList.remove("hidden");
+    el.innerHTML = "";
+    var speaker = S.beat && S.beat.speakerId;
+    present.forEach(function (id) {
+      var n = NB.NPCS[id];
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "pad-talk-btn" + (speaker === id ? " on" : "");
+      b.setAttribute("data-npc", id);
+      b.innerHTML = "<small>Talk</small>" + escapeHtml((n.name.split(" ")[0]) || n.name);
+      b.addEventListener("click", function () { hearNpc(id); });
+      el.appendChild(b);
+    });
   }
 
   function hearNpc(id) {
@@ -1462,6 +1640,7 @@
     if (!S.beat || !(S.beat.lines || []).length) return false;
     var full = currentLine();
     if (localShown < full.length) return false;
+    if ((S.beat.holdThrough | 0) > 0 && (S.beat.index | 0) < (S.beat.holdThrough | 0)) return false;
     if ((S.beat.index | 0) < ((S.beat.lines || []).length - 1)) return true;
     if (S.beat.followLine) return true;
     if (S.talkReturn || S.beat.talk) return true;
@@ -1516,7 +1695,7 @@
     }
     if (decisionOpen()) {
       if (S.decision.talk) return;
-      if (canPlayerContinue() || playerHasVoted()) resolveDecision(false);
+      if (canPlayerContinue() || playerHasVoted()) { flushDraft(); resolveDecision(false); }
       return;
     }
     advanceStory();
@@ -2057,8 +2236,8 @@
       return;
     }
     openModal(
-      "<h3>Open as DM</h3><div class='form-grid'><label>Table PIN<input id='role-pin' value='' placeholder='PIN' autocapitalize='characters'></label></div>" +
-      "<div class='modal-actions'><button type='button' class='btn brass' id='role-go'>Enter</button>" +
+      "<h3>Open the table</h3><div class='form-grid'><label>Table PIN<input id='role-pin' value='' placeholder='PIN' autocapitalize='characters'></label></div>" +
+      "<div class='modal-actions'><button type='button' class='btn brass' id='role-go'>Set the table</button>" +
       "<button type='button' class='btn ink' data-close>Back</button></div>"
     );
     $("role-go").addEventListener("click", function () {
@@ -2209,7 +2388,7 @@
       if (liveEl && typeof NB.syncLiveCount === "function") {
         var n = NB.syncLiveCount(S);
         var on = NB.syncLinked();
-        liveEl.textContent = on ? ("live · " + Math.max(1, n)) : "this phone";
+        liveEl.textContent = on ? ("live · " + n) : (isDM() ? "this laptop" : "this phone");
         liveEl.classList.toggle("live", !!on);
       }
       renderHpStrip();
@@ -2259,12 +2438,16 @@
     NB.initSync({
       getState: function () { return S; },
       getMe: function () {
+        if (isDM()) {
+          return { key: "table", name: "the table", color: "#c9a15b", pc: null, seat: "stage" };
+        }
         var pc = myPc();
         return {
           key: myKey(),
           name: displayName(),
           color: (pc && pc.color) || "#3d8a82",
-          pc: pc
+          pc: pc,
+          seat: "player"
         };
       },
       applyState: applyRemoteState

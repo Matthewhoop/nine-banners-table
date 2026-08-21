@@ -28,6 +28,7 @@
       heardLines: {},
       started: false,
       endCard: null,
+      storyLog: [],
       updatedAt: 0,
       rev: 0,
       presence: {}

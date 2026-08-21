@@ -17,7 +17,7 @@
   var STORY_KEYS = [
     "sceneId", "stageMode", "faceoff", "beat", "decision", "resolvedDecisions",
     "lastAction", "started", "endCard", "talkReturn", "pendingNextScene",
-    "heardLines", "lastRoll", "px", "py", "facing"
+    "heardLines", "lastRoll", "px", "py", "facing", "storyLog"
   ];
 
   function now() { return Date.now(); }
@@ -151,20 +151,29 @@
     return next;
   }
 
+  function isStageSeat(entry, key) {
+    var k = nameKey(key || (entry && (entry.key || entry.name)));
+    if (k === "table" || k === "dm") return true;
+    return !!(entry && entry.seat === "stage");
+  }
+
   function liveCount(state) {
     var names = {};
     var S = state || (api && api.getState && api.getState()) || {};
     var me = (api && api.getMe && api.getMe()) || {};
     var mk = nameKey(me.key || me.name);
-    if (mk && mk !== "guest") names[mk] = true;
-    Object.keys(prunePresenceMap(S.presence)).forEach(function (k) {
-      if (k && k !== "guest") names[k] = true;
+    if (mk && mk !== "guest" && !isStageSeat(me, mk)) names[mk] = true;
+    var pres = prunePresenceMap(S.presence);
+    Object.keys(pres).forEach(function (k) {
+      if (!k || k === "guest") return;
+      if (isStageSeat(pres[k], k)) return;
+      names[k] = true;
     });
     (S.party || []).forEach(function (p) {
       var k = nameKey(p && p.name);
-      if (k) names[k] = true;
+      if (k && k !== "guest" && k !== "table" && k !== "dm") names[k] = true;
     });
-    return Math.max(1, Object.keys(names).length);
+    return Object.keys(names).length;
   }
 
   function applyIncoming(remote, first) {
@@ -205,6 +214,7 @@
       key: key,
       name: entry.name || key,
       color: entry.color || "#c9a15b",
+      seat: entry.seat || (isStageSeat(entry, key) ? "stage" : "player"),
       at: entry.at || now()
     };
     if (typeof api.applyState === "function") {
@@ -217,7 +227,14 @@
     var me = (api && api.getMe && api.getMe()) || {};
     var key = nameKey(me.key || me.name);
     if (!key || key === "guest") return null;
-    return { type: "heartbeat", key: key, name: me.name || key, color: me.color || "#c9a15b", at: now() };
+    return {
+      type: "heartbeat",
+      key: key,
+      name: me.name || key,
+      color: me.color || "#c9a15b",
+      seat: me.seat || (isStageSeat(me, key) ? "stage" : "player"),
+      at: now()
+    };
   }
 
   function pulse() {
@@ -272,6 +289,7 @@
           key: msg.key || msg.name,
           name: msg.name,
           color: msg.color || (msg.pc && msg.pc.color),
+          seat: msg.seat || ((nameKey(msg.key || msg.name) === "table") ? "stage" : "player"),
           at: now()
         });
       }
@@ -307,7 +325,8 @@
       name: me.name || "",
       key: me.key || nameKey(me.name),
       pc: me.pc || null,
-      color: me.color || ""
+      color: me.color || "",
+      seat: me.seat || "player"
     });
   }
 
@@ -433,8 +452,26 @@
   function startPeer() {
     hostId = hostPeerId();
     if (typeof Peer === "undefined") return;
-    becomeHost();
+    var me = (api && api.getMe && api.getMe()) || {};
+    if (me.seat === "stage") becomeHost();
+    else becomeClient();
   }
+
+  NB.refreshSyncRole = function () {
+    var me = (api && api.getMe && api.getMe()) || {};
+    hostId = hostPeerId();
+    if (typeof Peer === "undefined") return;
+    if (me.seat === "stage") {
+      if (role === "host") return;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      retries = 0;
+      destroyPeer();
+      becomeHost();
+      return;
+    }
+    if (role === "client" || role === "host") return;
+    becomeClient();
+  };
 
   NB.mergeRemote = mergeRemote;
   NB.hostPeerId = hostPeerId;
