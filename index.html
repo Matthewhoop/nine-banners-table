@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0c1210">
   <meta name="mobile-web-app-capable" content="yes">
   <title>Nine Banners · The Table</title>
-  <link rel="stylesheet" href="css/table.css">
+  <link rel="stylesheet" href="css/table.css?v=20260821c">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect fill='%230c1210' width='16' height='16'/%3E%3Crect fill='%23c9a15b' x='2' y='3' width='2' height='8'/%3E%3Crect fill='%232a6b6b' x='5' y='3' width='2' height='8'/%3E%3Crect fill='%238b3a2a' x='8' y='3' width='2' height='8'/%3E%3Crect fill='%23d4b46a' x='11' y='3' width='2' height='8'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -20,24 +20,29 @@
       <div class="join-card">
         <p class="eyebrow">Pellane · three days · a river truce</p>
         <h1>The Accord of<br>Nine Banners</h1>
-        <p class="join-lede">A shared story companion the whole table opens on their phones while you play together. You are envoy Sera Vell’s blades. Keep her alive. Keep her seal off other people’s wax. Smile through three days of toasts.</p>
-        <div class="join-actions">
-          <button type="button" class="btn brass" id="btn-open-dm">Open as DM</button>
-          <button type="button" class="btn ink" id="btn-show-player">Join as player</button>
-        </div>
-        <form id="form-dm" class="join-form hidden" autocomplete="off">
-          <label>Table PIN
-            <input id="input-pin" type="text" inputmode="text" maxlength="16" value="9BANNERS" autocapitalize="characters">
-          </label>
-          <button type="submit" class="btn brass">Set the table</button>
-        </form>
-        <form id="form-player" class="join-form hidden" autocomplete="off">
+        <p class="join-lede">The table is already being run — sit down and play. You are envoy Sera Vell’s blades. Keep her alive. Keep her seal off other people’s wax. Smile through three days of toasts.</p>
+        <form id="form-player" class="join-form" autocomplete="off">
           <label>Your name at the table
             <input id="input-name" type="text" maxlength="24" placeholder="e.g. Kade" autocapitalize="words">
           </label>
-          <button type="submit" class="btn ink">Sit down</button>
+          <button type="submit" class="btn brass" id="btn-sit">Sit down</button>
+          <div id="join-leftover" class="join-actions">
+            <button type="submit" class="btn brass" id="btn-resume">Resume</button>
+            <button type="button" class="btn ink" id="btn-fresh">Start fresh</button>
+          </div>
         </form>
-        <p class="join-foot">Table code <strong id="join-code">9B-PELLANE</strong> · same site, same story. Hosting comes next.</p>
+        <button type="button" class="btn slim join-dm" id="btn-open-dm">Open as DM</button>
+        <form id="form-dm" class="join-form join-dm-form hidden" autocomplete="off">
+          <label>Table PIN
+            <input id="input-pin" type="text" inputmode="text" maxlength="16" value="9BANNERS" autocapitalize="characters">
+          </label>
+          <button type="submit" class="btn ink" id="btn-dm-sit">Set the table</button>
+          <div id="join-dm-leftover" class="join-actions">
+            <button type="submit" class="btn brass" id="btn-dm-resume">Resume</button>
+            <button type="button" class="btn ink" id="btn-dm-fresh">Start fresh</button>
+          </div>
+        </form>
+        <p class="join-foot">Table code <strong id="join-code">9B-PELLANE</strong> · same code, same story — open it on another phone.</p>
       </div>
     </section>
 
@@ -47,7 +52,7 @@
           <span class="sigil" aria-hidden="true"></span>
           <div>
             <p class="top-title" id="top-scene">Low Quay</p>
-            <p class="top-sub"><span id="top-code">9B-PELLANE</span> · <span id="top-role">player</span></p>
+            <p class="top-sub"><span id="top-code">9B-PELLANE</span> · <span id="top-role">player</span> · <span id="top-live">this phone</span></p>
           </div>
         </div>
         <div class="topbar-right">
@@ -58,6 +63,7 @@
 
       <div id="panel-stage" class="panel">
         <div id="hp-strip" class="hp-strip hidden" role="region" aria-label="Party health"></div>
+        <div id="live-row" class="live-row hidden" aria-label="Who is here"></div>
         <div class="story-page" id="story-page">
           <div class="story-art" id="story-art">
             <canvas id="stage" width="240" height="160" aria-label="Illustrated scene"></canvas>
@@ -72,6 +78,7 @@
             </div>
           </button>
           <div id="decision-card" class="decision-card hidden" aria-live="polite"></div>
+          <div id="end-card" class="end-card hidden" aria-live="polite"></div>
         </div>
 
         <div id="faceoff-ui" class="faceoff-ui hidden">
@@ -154,11 +161,13 @@
     <div id="fb-toast" class="fb-toast hidden" role="status">Got it. Thanks.</div>
   </div>
 
-  <script src="js/data.js"></script>
-  <script src="js/coach.js"></script>
-  <script src="js/pix.js"></script>
-  <script src="js/state.js"></script>
-  <script src="js/feedback.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/data.js?v=20260821c"></script>
+  <script src="js/coach.js?v=20260821c"></script>
+  <script src="js/pix.js?v=20260821c"></script>
+  <script src="js/state.js?v=20260821c"></script>
+  <script src="js/feedback.js?v=20260821c"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="js/sync.js?v=20260821c"></script>
+  <script src="js/app.js?v=20260821c"></script>
 </body>
 </html>
