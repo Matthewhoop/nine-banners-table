@@ -544,5 +544,122 @@
     ]
   };
 
+
+  /* Player-safe. Custom text is matched here so the room answers the move. */
+  NB.INTENTS = {
+    _: [
+      { intent: "talk", keys: ["talk", "ask", "tell", "say", "speak", "question"] },
+      { intent: "look", keys: ["look", "watch", "scan", "search", "check", "inspect", "study"] },
+      { intent: "listen", keys: ["listen", "eaves", "overhear", "hear"] },
+      { intent: "help", keys: ["help", "aid", "guard", "protect", "cover"] },
+      { intent: "buy", keys: ["buy", "pay", "round", "ale", "drink", "stew", "bottle"] },
+      { intent: "wait", keys: ["wait", "hold", "stay", "linger"] },
+      { intent: "leave", keys: ["leave", "go", "walk", "out", "away"] },
+      { intent: "steel", keys: ["draw", "sword", "steel", "fight", "threaten", "stab"] }
+    ],
+    inn: [
+      { intent: "bar", choice: "Sit at the bar", keys: ["bar", "stool", "oak", "mara"] },
+      { intent: "back", choice: "Take the back table", keys: ["back table", "corner", "wall", "lamp"] },
+      { intent: "stand", choice: "Stay on your feet", keys: ["stand", "feet", "boots", "on my feet"] }
+    ],
+    quay: [
+      { intent: "listen", choice: "Listen", keys: ["listen", "lean", "crate", "barge", "overhear"] },
+      { intent: "leave", choice: "Walk past", keys: ["walk past", "ignore", "keep walking", "pass"] }
+    ],
+    hall: [
+      { intent: "vell", choice: "House Vell", keys: ["vell", "sera", "our"] },
+      { intent: "dreth", choice: "House Dreth", keys: ["dreth"] },
+      { intent: "calren", choice: "House Calren", keys: ["calren", "ise", "silk"] },
+      { intent: "host", choice: "The host-lord", keys: ["pava", "host", "pellane", "rell"] }
+    ],
+    bridge: [
+      { intent: "ise", choice: "Walk with Ise", keys: ["ise", "calren", "walk with", "warehouse"] },
+      { intent: "stair", choice: "Hear Aldren’s stair", keys: ["aldren", "stair", "door", "uncle"] },
+      { intent: "decline", choice: "Decline both", keys: ["decline", "neither", "no thanks", "refuse"] }
+    ],
+    banquet: [
+      { intent: "sera", choice: "Sera’s toast", keys: ["sera"] },
+      { intent: "pava", choice: "Pava’s toast", keys: ["pava", "host"] },
+      { intent: "dreth", choice: "Dreth’s toast", keys: ["dreth"] },
+      { intent: "kell", choice: "Kell’s toast", keys: ["kell", "hymn", "priest"] }
+    ]
+  };
+
+  NB.REACTS = {
+    _: {
+      talk: "The room hears you. Someone answers. Someone pretends not to.",
+      look: "You take the room: hands, exits, who is watching whom.",
+      listen: "You catch a scrap and let the rest go by.",
+      help: "You put yourself in the way. The table notes it.",
+      buy: "Coin hits wood. The room warms a degree.",
+      wait: "You hold. The moment does not mind waiting with you.",
+      leave: "You give the room your back. It keeps talking.",
+      steel: "Steel is a last language. You keep it sheathed. The room still saw the thought.",
+      do: "The room takes that and answers it, not the script."
+    },
+    inn: {
+      talk: "Mara’s rag pauses. Aldren smiles like he was already listening.",
+      look: "Door, badges, Lir’s ink-black thumb. The oak already has opinions.",
+      listen: "Barge-talk, a bottle set down too carefully, stew hitting a bowl.",
+      buy: "Mara takes the coin without looking up. Stew follows.",
+      bar: "Mara slides stew down the oak and pretends not to count the badges.",
+      back: "The back table has a lamp, a wall, and a clean view of the door.",
+      stand: "You keep your boots. The room fills. Nobody asks you to sit.",
+      steel: "Mara does not raise her voice. “Not in my house.” The badges suddenly feel new.",
+      do: "The Low Quay files that under the night and keeps pouring."
+    },
+    quay: {
+      talk: "Sera’s glance says keep it short. Dawn is already late.",
+      look: "Poles, pitch, Durne’s count. The crate is still the loudest thing.",
+      listen: "Two voices over a crate. The hall can wait a breath.",
+      leave: "You let the barge-hands keep their crate. The quay goes on.",
+      steel: "Durne’s eyes find your hand. Extra coin this week. Extra enemies.",
+      do: "The river does not pause for it. The banners still go up."
+    },
+    hall: {
+      talk: "Voices drop. Petitions have ears.",
+      look: "Nine colors. One clerk who knows which door is which.",
+      listen: "A clause, a cough, a hymn promised for later.",
+      steel: "Pava’s chain catches the light. “This city offered a table.”",
+      do: "The hall files it. The petitions do not stop."
+    },
+    bridge: {
+      talk: "The river talks under your boots. So does everyone else.",
+      look: "Ise’s smile, Aldren’s limp, Ysolde watching water.",
+      listen: "Warehouses. A stair the banners never use. Nothing that costs yet.",
+      do: "The stones keep your hours. The river does not mind."
+    },
+    banquet: {
+      talk: "Gold, wine, watching eyes. A toast is a kind of answer.",
+      look: "Nine cups. Who drinks. Who does not.",
+      listen: "A hymn promised. Not yet.",
+      steel: "Sheaths stay full. The room is grateful and unkind about it.",
+      do: "The toast goes on. Your move sits in the cup with the wine."
+    }
+  };
+
+  NB.TALK_INTENTS = [
+    { keys: ["stew", "food", "eat", "hungry", "bowl"], line: "Stew first. Politics after you pay for the bottle that comes with it." },
+    { keys: ["drink", "ale", "bottle", "wine", "round"], line: "That I can do. Coin on the oak." },
+    { keys: ["door", "back room", "stair", "way out"], line: "Doors have names. Yours is not on most of them." },
+    { keys: ["sera", "seal", "badge", "employer"], line: "Keep her breathing. The rest is her ink." },
+    { keys: ["treaty", "truce", "petition", "banner"], line: "Three days. A paper. Don’t flip the table." },
+    { keys: ["river", "barge", "ford", "quay"], line: "The river brings all kinds. I don’t ask." },
+    { keys: ["help", "need", "favor"], line: "Say it plain. I pay favors when I owe them." },
+    { keys: ["sorry", "thanks", "please"], line: "Heard. Don’t make a speech of it." }
+  ];
+
+
+  NB.PLAYER_LOOKS = [
+    { id: "teal", label: "Teal", skin: "#d2a07a", hair: "#5a3a22", tunic: "#2a6b5a", tunic2: "#1a3a32", pants: "#4a3424", boots: "#2a1c12", accent: "#c9a15b" },
+    { id: "brass", label: "Brass", skin: "#e0c0a0", hair: "#3a2418", tunic: "#c9a15b", tunic2: "#8a6d32", pants: "#5a4830", boots: "#2a2014", accent: "#e8d090" },
+    { id: "ember", label: "Ember", skin: "#c49870", hair: "#1a1410", tunic: "#8a3a1c", tunic2: "#4a181c", pants: "#2a1c18", boots: "#1a1210", accent: "#d4652f" },
+    { id: "ink", label: "Ink", skin: "#d8b090", hair: "#1a1a1c", tunic: "#243a68", tunic2: "#162444", pants: "#1c2a44", boots: "#11110e", accent: "#8aa0b8" },
+    { id: "violet", label: "Violet", skin: "#d4b090", hair: "#2a1c28", tunic: "#5a3a78", tunic2: "#3a2450", pants: "#2a1c30", boots: "#161018", accent: "#c0a0e0" },
+    { id: "pale", label: "Pale", skin: "#e8d0b8", hair: "#c4b08a", tunic: "#d8e0e6", tunic2: "#3a6a7a", pants: "#c8d0d4", boots: "#2a2a28", accent: "#7ab0c4" },
+    { id: "oak", label: "Oak", skin: "#c09068", hair: "#3a2818", tunic: "#3d5a2a", tunic2: "#243818", pants: "#4a3420", boots: "#2a1c10", accent: "#6a4a20" },
+    { id: "night", label: "Night", skin: "#b09078", hair: "#1a1a1c", tunic: "#2a2a30", tunic2: "#141416", pants: "#1c1c20", boots: "#0e0e10", accent: "#8a8a96" }
+  ];
+
   NB.PC_COLORS = ["#3d8a82", "#c9a15b", "#8a3a2a", "#4a6aaa", "#7a4a8a", "#4a7a3a"];
 })(window.NB = window.NB || {});

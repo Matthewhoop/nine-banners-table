@@ -121,6 +121,15 @@
     px(9, 24, 3, 2, look.boots);
   }
 
+  NB.sceneToView = function (x, y, destW, destH) {
+    var ir = 240 / 160;
+    var cr = destW / destH;
+    var dw, dh, dx, dy;
+    if (ir > cr) { dh = destH; dw = destH * ir; dx = (destW - dw) / 2; dy = 0; }
+    else { dw = destW; dh = destW / ir; dx = 0; dy = (destH - dh) / 2; }
+    return { x: dx + (x / 240) * dw, y: dy + (y / 160) * dh };
+  };
+
   NB.drawActor = function (ctx, id, x, y, opts) {
     opts = opts || {};
     var facing = opts.facing || "down";
@@ -131,7 +140,9 @@
     if (walking) bob = (Math.floor(t / 8) % 2) ? -1 : 0;
     else bob = (Math.floor(t / 28) % 2) ? 0 : -1;
     var look = opts.look || NB.LOOKS[id] || NB.LOOKS.player;
-    var spr = sprites[id] || (id === "player" ? sprites.player : null);
+    var spr = sprites[id] || null;
+    if (opts.look && (id === "player" || opts.forceFallback)) spr = null;
+    if (!spr && id !== "player" && !opts.look) spr = sprites[id] || null;
     ctx.save();
     ctx.translate(Math.round(x), Math.round(y + bob));
     if (facing === "left") ctx.scale(-1, 1);
@@ -270,7 +281,9 @@
     c.clearRect(0, 0, canvas.width, canvas.height);
     c.fillStyle = "#0c0a08";
     c.fillRect(0, 0, canvas.width, canvas.height);
-    var spr = sprites[id] || (id === "player" ? sprites.player : null);
+    var spr = sprites[id] || null;
+    if (opts.look && (id === "player" || opts.forceFallback)) spr = null;
+    if (!spr && id !== "player" && !opts.look) spr = sprites[id] || null;
     if (spr) {
       var cropH = Math.max(8, Math.floor(spr.height * 0.46));
       var cropY = Math.floor(spr.height * 0.02);

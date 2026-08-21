@@ -1,7 +1,9 @@
 /* global window, document, NB */
 (function () {
   var S = NB.loadState();
-  var sess = NB.loadSession() || { role: null, name: "", pin: "" };
+  var sess = NB.loadSession() || { role: null, name: "", pin: "", lookId: "teal" };
+  var selectedLook = (sess && sess.lookId) || "teal";
+  var actorHits = [];
   var panel = "stage";
   var t = 0;
   var localShown = 0;
@@ -42,14 +44,34 @@
     return S.party || [];
   }
 
+  function playerLook(id) {
+    var list = NB.PLAYER_LOOKS || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return list[i];
+    }
+    return list[0] || NB.LOOKS.player;
+  }
   function lookForPc(pc) {
-    var base = NB.LOOKS.player || {};
-    var color = (pc && pc.color) || base.tunic;
+    var id = (pc && pc.lookId) || selectedLook || (sess && sess.lookId) || "teal";
+    var src = playerLook(id) || NB.LOOKS.player || {};
     var look = {};
-    Object.keys(base).forEach(function (k) { look[k] = base[k]; });
-    look.tunic = color;
-    look.accent = color;
+    Object.keys(src).forEach(function (k) {
+      if (k !== "id" && k !== "label") look[k] = src[k];
+    });
+    if (pc && pc.color && !pc.lookId) {
+      look.tunic = pc.color;
+      look.accent = pc.color;
+    }
     return look;
+  }
+  function dedupParty() {
+    var seen = {};
+    S.party = (S.party || []).filter(function (pc) {
+      var k = String((pc && pc.name) || "").trim().toLowerCase();
+      if (!k || seen[k]) return false;
+      seen[k] = true;
+      return true;
+    });
   }
 
   function livePeople() {
@@ -351,23 +373,86 @@
     if (!d) return null;
     try { return JSON.parse(JSON.stringify(d)); } catch (e) { return d; }
   }
+  function foldText(s) {
+    return String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  }
+  function clipText(s, n) {
+    s = String(s || "").replace(/\s+/g, " ").trim();
+    if (s.length <= n) return s;
+    return s.slice(0, n - 1).replace(/\s+\S*$/, "") + "…";
+  }
+  function winningText(d) {
+    return submissionList(d).map(function (x) { return (x.text || "").trim(); }).filter(Boolean)[0] || "";
+  }
+  function matchChoice(text, choices) {
+    var t = foldText(text);
+    if (!t) return "";
+    var best = "", score = 0;
+    (choices || []).forEach(function (c) {
+      var f = foldText(c);
+      if (!f) return;
+      if (t === f || t.indexOf(f) >= 0 || f.indexOf(t) >= 0) {
+        if (f.length > score) { best = c; score = f.length; }
+        return;
+      }
+      var words = f.split(" ").filter(function (w) { return w.length > 2; });
+      var hits = words.filter(function (w) { return t.indexOf(w) >= 0; }).length;
+      if (words.length && hits === words.length && hits * 4 > score) {
+        best = c;
+        score = hits * 4;
+      }
+    });
+    return best;
+  }
+  function intentRule(text, sceneId) {
+    var t = foldText(text);
+    var packs = [];
+    if (NB.INTENTS && NB.INTENTS[sceneId]) packs = packs.concat(NB.INTENTS[sceneId]);
+    if (NB.INTENTS && NB.INTENTS._) packs = packs.concat(NB.INTENTS._);
+    for (var i = 0; i < packs.length; i++) {
+      var keys = packs[i].keys || [];
+      for (var k = 0; k < keys.length; k++) {
+        if (t.indexOf(keys[k]) >= 0) return packs[i];
+      }
+    }
+    return { intent: "do" };
+  }
+  function sceneReact(sceneId, intent) {
+    var table = (NB.REACTS && (NB.REACTS[sceneId] || NB.REACTS._)) || {};
+    return table[intent] || table.do || "The room takes that and answers it.";
+  }
   function winningChoice(d) {
     d = d || S.decision;
     var list = submissionList(d);
     if (!list.length) return "";
     if (d && d.kind === "solo") {
       var act = null;
-      list.forEach(function (s) { if (s.role === "act" && !act) act = s; });
-      return (act && act.choice) || "";
+      list.forEach(function (x) { if (x.role === "act" && !act) act = x; });
+      if (act && act.choice) return act.choice;
+      if (act && act.text) {
+        var sm = matchChoice(act.text, d.choices);
+        if (sm) return sm;
+        var sr = intentRule(act.text, S.sceneId);
+        if (sr.choice) return sr.choice;
+      }
+      return "";
     }
     var counts = {};
     var best = "", n = 0;
-    list.forEach(function (s) {
-      if (!s.choice) return;
-      counts[s.choice] = (counts[s.choice] || 0) + 1;
-      if (counts[s.choice] > n) { n = counts[s.choice]; best = s.choice; }
+    list.forEach(function (x) {
+      if (!x.choice) return;
+      counts[x.choice] = (counts[x.choice] || 0) + 1;
+      if (counts[x.choice] > n) { n = counts[x.choice]; best = x.choice; }
     });
-    return best || (list[0] && list[0].choice) || "";
+    if (best) return best;
+    var text = winningText(d);
+    if (text) {
+      var matched = matchChoice(text, d.choices);
+      if (matched) return matched;
+      var rule = intentRule(text, S.sceneId);
+      if (rule.choice) return rule.choice;
+    }
+    return (list[0] && list[0].choice) || "";
   }
   function pickAftermath(d) {
     d = d || S.decision;
@@ -376,7 +461,27 @@
     var choice = winningChoice(d);
     if (choice && map[choice]) return map[choice];
     if (map["*"]) return map["*"];
-    return "The table takes that as the move.";
+    var text = winningText(d);
+    if (text) {
+      var rule = intentRule(text, S.sceneId);
+      if (rule.choice && map[rule.choice]) return map[rule.choice];
+      var who = "";
+      var first = submissionList(d)[0];
+      if (first && first.who) who = first.who + " — ";
+      return who + clipText(text, 80) + " " + sceneReact(S.sceneId, rule.intent);
+    }
+    return "The room waits on a clearer move.";
+  }
+  function talkReplyTo(text) {
+    var t = foldText(text);
+    var rules = NB.TALK_INTENTS || [];
+    for (var i = 0; i < rules.length; i++) {
+      var keys = rules[i].keys || [];
+      for (var k = 0; k < keys.length; k++) {
+        if (t.indexOf(keys[k]) >= 0) return rules[i].line;
+      }
+    }
+    return "";
   }
   function youSaidLine(act) {
     if (!act) return "You let that hang.";
@@ -551,6 +656,26 @@
     if (!act) act = list[0] || null;
     var said = skipped && !act ? "You let that hang." : youSaidLine(act);
     S.lastAction = said;
+    if (!skipped && act && act.text) {
+      var heard = talkReplyTo(act.text);
+      if (heard) {
+        var turn0 = (d.talkTurn | 0) + 1;
+        var max0 = d.talkMax > 0 ? d.talkMax : 4;
+        d.talkTurn = turn0;
+        if (turn0 >= max0) {
+          finishTalk(d, heard);
+          return;
+        }
+        rememberTalkLine(d, heard);
+        d.heardLine = heard;
+        d.submissions = {};
+        decDraft = { id: d.id, text: "", choice: "" };
+        setBeat({ speakerId: d.npcId, lines: [heard], index: 0, talk: true }, true);
+        persist();
+        renderChrome();
+        return;
+      }
+    }
     var closerPick = !!(skipped || !act || isTalkCloserChoice(act.choice));
     if (closerPick) {
       finishTalk(d, pickTalkLine(d, true));
@@ -903,6 +1028,7 @@
       try { name.focus(); } catch (e) {}
     }
     paintJoinActions();
+    paintLookPicks();
   }
 
   function tableIdle() {
@@ -954,7 +1080,38 @@
     if (!name) { $("input-name").focus(); return false; }
     sess.role = "player";
     sess.name = name;
+    sess.lookId = selectedLook || sess.lookId || "teal";
     return true;
+  }
+  function paintLookPicks() {
+    var el = $("look-picks");
+    if (!el || !NB.PLAYER_LOOKS) return;
+    el.innerHTML = "";
+    NB.PLAYER_LOOKS.forEach(function (look) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "look-pick" + (look.id === selectedLook ? " on" : "");
+      b.setAttribute("data-look", look.id);
+      var cv = document.createElement("canvas");
+      cv.width = 44;
+      cv.height = 44;
+      var lab = document.createElement("span");
+      lab.textContent = look.label;
+      b.appendChild(cv);
+      b.appendChild(lab);
+      b.addEventListener("click", function () {
+        selectedLook = look.id;
+        sess.lookId = look.id;
+        paintLookPicks();
+      });
+      el.appendChild(b);
+      var c = cv.getContext("2d");
+      c.imageSmoothingEnabled = false;
+      c.fillStyle = "#0c0a08";
+      c.fillRect(0, 0, 44, 44);
+      var fake = { lookId: look.id, color: look.tunic };
+      NB.drawActor(c, "player", 22, 40, { t: 0, h: 34, look: lookForPc(fake), forceFallback: true });
+    });
   }
 
   function takeDmPin() {
@@ -991,13 +1148,17 @@
     $("view-join").classList.add("hidden");
     $("view-table").classList.remove("hidden");
     NB.saveSession(sess);
-    if (S.party.length === 0 && sess.role === "player") {
-      S.party.push(NB.newPc(sess.name, NB.PC_COLORS[0]));
-    } else if (sess.role === "player" && sess.name) {
-      var exists = S.party.some(function (p) { return p.name.toLowerCase() === sess.name.toLowerCase(); });
-      if (!exists) {
-        S.party.push(NB.newPc(sess.name, NB.PC_COLORS[S.party.length % NB.PC_COLORS.length]));
+    if (sess.role === "player" && sess.name) {
+      dedupParty();
+      var mine = S.party.find(function (p) { return p.name.toLowerCase() === sess.name.toLowerCase(); });
+      var look = playerLook(sess.lookId || selectedLook || "teal");
+      if (!mine) {
+        mine = NB.newPc(sess.name, (look && look.tunic) || NB.PC_COLORS[S.party.length % NB.PC_COLORS.length]);
+        S.party.push(mine);
       }
+      mine.lookId = sess.lookId || selectedLook || mine.lookId || "teal";
+      if (look && look.tunic) mine.color = look.tunic;
+      dedupParty();
     }
     markJoined();
     if (tableIdle()) startDay1();
@@ -1059,7 +1220,7 @@
     $("story-page").classList.toggle("can-continue", !!(decisionOpen() && (canPlayerContinue() || playerHasVoted())));
     $("story-page").classList.toggle("faceoff", isFaceoff());
     $("faceoff-ui").classList.toggle("hidden", !isFaceoff());
-    $("cast-strip").classList.toggle("hidden", isFaceoff());
+    $("cast-strip").classList.add("hidden");
     $("btn-faceoff").textContent = isFaceoff() ? "End face-off" : "Face-off";
     syncSceneDecision();
     if (shouldAutoResolve()) {
@@ -1574,21 +1735,45 @@
     var sc = scene();
     NB.drawSceneCover(ctx, sc, isFaceoff() ? "faceoff" : "story", viewW, viewH);
     if (!isFaceoff()) {
+      actorHits = [];
+      var figH = Math.max(28, Math.round(viewH * 0.22));
+      var placed = (sc.npcs || []).slice();
+      var have = {};
+      placed.forEach(function (n) { if (n && n.id) have[n.id] = true; });
+      (sc.present || []).forEach(function (id) {
+        if (have[id]) return;
+        placed.push({ id: id, x: 70 + placed.length * 36, y: 110 });
+      });
+      placed.forEach(function (n) {
+        if (!n || !NB.NPCS[n.id]) return;
+        var pt = NB.sceneToView(n.x || 120, n.y || 100, viewW, viewH);
+        var npc = NB.NPCS[n.id];
+        NB.drawActor(ctx, npc.sprite || n.id, Math.round(pt.x), Math.round(pt.y), {
+          t: t,
+          h: figH,
+          facing: "down",
+          label: npc.name.split(" ")[0],
+          look: NB.LOOKS[n.id] || NB.LOOKS[npc.sprite]
+        });
+        actorHits.push({ kind: "npc", id: n.id, x: pt.x, y: pt.y, r: figH * 0.55 });
+      });
       var pcs = livePeople();
       if (pcs.length) {
-        var standH = Math.max(34, Math.round(viewH * 0.26));
-        var standY = Math.round(viewH * 0.84);
-        var left = viewW * 0.18;
-        var right = viewW * 0.82;
+        var standH = Math.max(30, Math.round(viewH * 0.24));
+        var standY = Math.round(viewH * 0.88);
+        var left = viewW * 0.22;
+        var right = viewW * 0.78;
         pcs.forEach(function (pc, i) {
-          var x = pcs.length === 1 ? viewW * 0.50 : left + ((right - left) * i) / (pcs.length - 1);
+          var x = pcs.length === 1 ? viewW * 0.50 : left + ((right - left) * i) / Math.max(1, pcs.length - 1);
           NB.drawActor(ctx, "player", Math.round(x), standY, {
             t: t,
             h: standH,
             facing: "down",
             label: pc.name,
-            look: lookForPc(pc)
+            look: lookForPc(pc),
+            forceFallback: true
           });
+          actorHits.push({ kind: "pc", id: pc.id, x: x, y: standY, r: standH * 0.5 });
         });
       }
       return;
@@ -1969,6 +2154,20 @@
     $("story-caption").addEventListener("click", tapCaption);
     $("story-art").addEventListener("click", function (ev) {
       if (ev.target.closest(".cast-card")) return;
+      var art = $("story-art");
+      var r = art.getBoundingClientRect();
+      var x = ev.clientX - r.left;
+      var y = ev.clientY - r.top;
+      var hit = null;
+      for (var i = actorHits.length - 1; i >= 0; i--) {
+        var a = actorHits[i];
+        var dx = x - a.x, dy = y - (a.y - 10);
+        if (dx * dx + dy * dy <= (a.r * a.r)) { hit = a; break; }
+      }
+      if (hit && hit.kind === "npc") {
+        hearNpc(hit.id);
+        return;
+      }
       tapCaption();
     });
     $("fo-cmds").addEventListener("click", function (ev) {

@@ -61,7 +61,8 @@
       claimed: {},
       asiAt: {},
       conditions: [],
-      color: color || NB.PC_COLORS[0]
+      color: color || NB.PC_COLORS[0],
+      lookId: "teal"
     };
   };
 
