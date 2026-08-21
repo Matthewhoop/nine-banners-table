@@ -58,8 +58,9 @@
     var src = playerLook(id) || NB.LOOKS.player || {};
     var look = {};
     Object.keys(src).forEach(function (k) {
-      if (k !== "id" && k !== "label") look[k] = src[k];
+      if (k !== "label") look[k] = src[k];
     });
+    look.id = src.id || id;
     if (pc && pc.color && !pc.lookId) {
       look.tunic = pc.color;
       look.accent = pc.color;
@@ -1213,7 +1214,7 @@
       c.fillStyle = "#0c0a08";
       c.fillRect(0, 0, 44, 44);
       var fake = { lookId: look.id, color: look.tunic };
-      NB.drawActor(c, "player", 22, 40, { t: 0, h: 34, look: lookForPc(fake), forceFallback: true });
+      NB.drawActor(c, "player", 22, 40, { t: 0, h: 38, look: lookForPc(fake) });
     });
   }
 
@@ -1938,7 +1939,7 @@
       });
       var pcs = livePeople();
       if (pcs.length) {
-        var standH = Math.max(30, Math.round(viewH * 0.24));
+        var standH = Math.max(48, Math.round(viewH * 0.34));
         var standY = Math.round(viewH * 0.88);
         var left = viewW * 0.22;
         var right = viewW * 0.78;
@@ -1949,8 +1950,7 @@
             h: standH,
             facing: "down",
             label: pc.name,
-            look: lookForPc(pc),
-            forceFallback: true
+            look: lookForPc(pc)
           });
           actorHits.push({ kind: "pc", id: pc.id, x: x, y: standY, r: standH * 0.5 });
         });

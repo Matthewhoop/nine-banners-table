@@ -101,6 +101,72 @@
 
   NB.hasSprite = function (id) { return !!sprites[id]; };
 
+  var tintCache = {};
+
+  function parseHex(hex) {
+    var h = String(hex || "").replace("#", "");
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    if (h.length < 6) return [42, 107, 90];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    var hh = 0, ss = max ? d / max : 0, vv = max;
+    if (d) {
+      if (max === r) hh = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+      else if (max === g) hh = ((b - r) / d + 2) / 6;
+      else hh = ((r - g) / d + 4) / 6;
+    }
+    return [hh * 360, ss, vv];
+  }
+  function shadeTo(tr, tg, tb, lum) {
+    var tgt = (0.3 * tr + 0.59 * tg + 0.11 * tb) / 255 || 0.4;
+    var k = lum / tgt;
+    return [
+      Math.max(0, Math.min(255, Math.round(tr * k))),
+      Math.max(0, Math.min(255, Math.round(tg * k))),
+      Math.max(0, Math.min(255, Math.round(tb * k)))
+    ];
+  }
+  function recolorSprite(src, look) {
+    if (!src || !look) return src;
+    var key = String(look.id || "") + "|" + String(look.tunic || "") + "|" + String(look.tunic2 || "") + "|" + String(look.accent || "");
+    if (tintCache[key]) return tintCache[key];
+    var c = document.createElement("canvas");
+    c.width = src.width;
+    c.height = src.height;
+    var cx = c.getContext("2d");
+    cx.drawImage(src, 0, 0);
+    var img = cx.getImageData(0, 0, c.width, c.height);
+    var p = img.data;
+    var tunic = parseHex(look.tunic);
+    var tunic2 = parseHex(look.tunic2 || look.tunic);
+    var accent = parseHex(look.accent || look.tunic);
+    var i, r, g, b, hsv, dest, out, lum;
+    for (i = 0; i < p.length; i += 4) {
+      if (p[i + 3] < 20) continue;
+      r = p[i]; g = p[i + 1]; b = p[i + 2];
+      hsv = rgbToHsv(r, g, b);
+      dest = null;
+      if (hsv[1] > 0.16 && hsv[0] >= 128 && hsv[0] <= 198) dest = hsv[2] > 0.38 ? tunic : tunic2;
+      else if (hsv[1] > 0.3 && hsv[2] > 0.34 && hsv[0] >= 32 && hsv[0] <= 58) dest = accent;
+      if (!dest) continue;
+      lum = (0.3 * r + 0.59 * g + 0.11 * b) / 255;
+      out = shadeTo(dest[0], dest[1], dest[2], lum);
+      p[i] = out[0]; p[i + 1] = out[1]; p[i + 2] = out[2];
+    }
+    cx.putImageData(img, 0, 0);
+    tintCache[key] = c;
+    return c;
+  }
+  function spriteFor(id, look) {
+    var spr = sprites[id] || null;
+    if (!spr) spr = sprites.player || null;
+    if (spr && look && (!sprites[id] || id === "player")) spr = recolorSprite(spr, look);
+    return spr;
+  }
+
   function fallbackPerson(ctx, look, scale) {
     var s = scale || 1;
     var px = function (x, y, w, h, c) {
@@ -140,9 +206,7 @@
     if (walking) bob = (Math.floor(t / 8) % 2) ? -1 : 0;
     else bob = (Math.floor(t / 28) % 2) ? 0 : -1;
     var look = opts.look || NB.LOOKS[id] || NB.LOOKS.player;
-    var spr = sprites[id] || null;
-    if (opts.look && (id === "player" || opts.forceFallback)) spr = null;
-    if (!spr && id !== "player" && !opts.look) spr = sprites[id] || null;
+    var spr = spriteFor(id, look);
     ctx.save();
     ctx.translate(Math.round(x), Math.round(y + bob));
     if (facing === "left") ctx.scale(-1, 1);
@@ -152,14 +216,6 @@
       var dh = Math.round(spr.height * scale);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(spr, -Math.round(dw / 2), -dh, dw, dh);
-      if (look && look.tunic && opts.look) {
-        ctx.globalCompositeOperation = "source-atop";
-        ctx.globalAlpha = 0.2;
-        ctx.fillStyle = look.tunic;
-        ctx.fillRect(-Math.round(dw / 2), -dh, dw, dh);
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 1;
-      }
     } else {
       var sc = h / 26;
       ctx.translate(-Math.round(8 * sc), -Math.round(26 * sc));
@@ -281,9 +337,7 @@
     c.clearRect(0, 0, canvas.width, canvas.height);
     c.fillStyle = "#0c0a08";
     c.fillRect(0, 0, canvas.width, canvas.height);
-    var spr = sprites[id] || null;
-    if (opts.look && (id === "player" || opts.forceFallback)) spr = null;
-    if (!spr && id !== "player" && !opts.look) spr = sprites[id] || null;
+    var spr = spriteFor(id, NB.LOOKS[id] || NB.LOOKS.player);
     if (spr) {
       var cropH = Math.max(8, Math.floor(spr.height * 0.46));
       var cropY = Math.floor(spr.height * 0.02);
